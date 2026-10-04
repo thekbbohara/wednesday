@@ -38,10 +38,10 @@ other agent CLIs you want as workers (codex, opencode, pi, kimi, agy).
 
 ## Run it
 
-Needs Node 22.18+ (runs the TypeScript directly), pnpm, and a logged-in
-`claude` CLI.
-
 ```sh
+git clone https://github.com/thekbbohara/majordomo.git
+cd majordomo
+cp .env.example .env            # optional: ASSISTANT_NAME=..., fallbacks, ...
 pnpm install
 pnpm build                      # the web UI
 pnpm start                      # web chat on http://127.0.0.1:4788
