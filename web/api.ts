@@ -4,7 +4,8 @@ export type ChatItem =
   | { type: "error"; id: number; ts: string; text: string }
   | { type: "agent"; id: number; ts: string; agent: string; event: string; text: string }
   | { type: "digest"; id: number; ts: string; text: string }
-  | { type: "levelup"; id: number; ts: string; skill: string; level: number };
+  | { type: "levelup"; id: number; ts: string; skill: string; level: number }
+  | { type: "newskill"; id: number; ts: string; skill: string; name: string; color: string };
 
 export interface Agent {
   id: string;

@@ -18,11 +18,7 @@ describe.skipIf(!live)('live captain', () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'jarvis-live-'))
   const cfg = loadConfig({ dataDir, model: process.env.JARVIS_LIVE_MODEL || 'haiku', tailMessages: 0 })
   const mem = new Memory(cfg.dbPath)
-  const captain = new Captain(
-    mem,
-    cfg,
-    new ClaudeRunner({ bin: cfg.claudeBin, model: cfg.model, cwd: dataDir, allowedTools: cfg.allowedTools, timeoutSec: 300 }),
-  )
+  const captain = new Captain(mem, cfg, () => new ClaudeRunner({ bin: cfg.claudeBin, model: cfg.model, cwd: dataDir, allowedTools: cfg.allowedTools, timeoutSec: 300 }))
   const log = (who: string, r: { text: string; contextTokens: number; sessionId: string }) =>
     console.info(`[${who} ${r.sessionId.slice(0, 8)} ${r.contextTokens} tok]\n${r.text}\n`)
 

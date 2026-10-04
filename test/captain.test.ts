@@ -35,7 +35,7 @@ function setup(script?: Script, cfg = {}) {
   const config = loadConfig({ dataDir, ...cfg })
   const mem = new Memory(config.dbPath)
   const runner = new FakeRunner(mem, script)
-  return { mem, runner, captain: new Captain(mem, config, runner) }
+  return { mem, runner, captain: new Captain(mem, config, () => runner) }
 }
 
 describe('captain', () => {
@@ -137,7 +137,7 @@ describe('captain', () => {
     mem.nowUpdate('Goal: x')
     const a = await captain.handle('one')
     const config = loadConfig({ dataDir: (captain as unknown as { cfg: { dataDir: string } }).cfg.dataDir })
-    const restarted = new Captain(mem, config, runner)
+    const restarted = new Captain(mem, config, () => runner)
     const b = await restarted.handle('two')
     expect(b.sessionId).toBe(a.sessionId)
     expect(runner.calls.at(-1)!.resume).toBe(true)

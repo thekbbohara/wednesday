@@ -8,16 +8,12 @@ import { mkdirSync } from 'node:fs'
 import { loadConfig } from './config.ts'
 import { Memory } from './memory/store.ts'
 import { Captain, type Reply } from './captain/captain.ts'
-import { ClaudeRunner } from './captain/runner.ts'
+import { buildRunner } from './captain/chain.ts'
 
 const cfg = loadConfig()
 mkdirSync(cfg.dataDir, { recursive: true })
 const mem = new Memory(cfg.dbPath, { nowBudgetChars: cfg.nowBudgetChars })
-const captain = new Captain(
-  mem,
-  cfg,
-  new ClaudeRunner({ bin: cfg.claudeBin, model: cfg.model, cwd: cfg.dataDir, allowedTools: cfg.allowedTools, timeoutSec: cfg.turnTimeout }),
-)
+const captain = new Captain(mem, cfg, (p) => buildRunner(p, cfg))
 
 const tty = stdout.isTTY
 const dim = (s: string) => (tty ? `\x1b[2m${s}\x1b[0m` : s)

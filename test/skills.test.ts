@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { Memory } from '../src/memory/store.ts'
 import { expForLevel, levelFor, progress } from '../src/skills/levels.ts'
-import { DEFAULT_SKILLS, loadSkills } from '../src/skills/skills.ts'
+import { addSkill, DEFAULT_SKILLS, loadSkills, MAX_SKILLS } from '../src/skills/skills.ts'
 
 describe('levels', () => {
   it('costs 50 more EXP per level', () => {
@@ -92,5 +92,20 @@ describe('migration to v3', () => {
     expect(after.taskList()[0]).toMatchObject({ title: 'old task', skill: null })
     after.taskCreate({ title: 'new', goal: 'g', skill: 'coding' })
     expect(after.expBySkill().get('coding')).toBe(5)
+  })
+})
+
+describe('addSkill', () => {
+  it('adds to skills.json with the next free colour, and refuses duplicates and overflow', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jarvis-addskill-'))
+    const sk = addSkill(dir, { name: 'Video Editing', covers: 'cutting and grading video' })
+    expect(sk).toMatchObject({ id: 'video-editing', name: 'Video Editing', color: '#e8793a' })
+    expect(loadSkills(dir).map((s) => s.id)).toContain('video-editing')
+    expect(() => addSkill(dir, { name: 'video editing', covers: 'x' })).toThrow(/already exists/)
+    expect(() => addSkill(dir, { name: 'Coding', covers: 'x' })).toThrow(/already exists/)
+    expect(() => addSkill(dir, { name: '!!', covers: 'x' })).toThrow(/not a usable/)
+    expect(() => addSkill(dir, { name: 'Music', covers: 'x', color: 'red' })).toThrow(/color/)
+    for (let i = loadSkills(dir).length; i < MAX_SKILLS; i++) addSkill(dir, { name: `Extra ${i}`, covers: 'x' })
+    expect(() => addSkill(dir, { name: 'One More', covers: 'x' })).toThrow(/full/)
   })
 })

@@ -35,6 +35,8 @@ export interface ClaudeRunnerOptions {
   cwd: string
   allowedTools: string[] | (() => string[])
   timeoutSec: number
+  /** Extra environment, e.g. CLAUDE_CONFIG_DIR for a second account. */
+  env?: Record<string, string>
 }
 
 export class ClaudeRunner implements Runner {
@@ -62,7 +64,7 @@ export class ClaudeRunner implements Runner {
       ...(req.resume ? ['--resume', req.sessionId] : ['--session-id', req.sessionId]),
     ]
     return new Promise((resolve) => {
-      const child = spawn(this.opts.bin, args, { cwd: this.opts.cwd, stdio: ['pipe', 'pipe', 'pipe'] })
+      const child = spawn(this.opts.bin, args, { cwd: this.opts.cwd, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, ...this.opts.env } })
       let out = ''
       let err = ''
       const timer = setTimeout(() => child.kill('SIGTERM'), this.opts.timeoutSec * 1000)

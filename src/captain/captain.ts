@@ -9,6 +9,7 @@ import { withFileLock } from './lock.ts'
 import { plainDash } from '../text.ts'
 import { buildTurnPrompt, handoffPrompt, newView, type SessionView } from './prompt.ts'
 import type { Runner, TurnResult } from './runner.ts'
+import { isUsageLimit, type Provider } from './provider.ts'
 
 const MCP_SERVER = fileURLToPath(new URL('../mcp/server.ts', import.meta.url))
 export const SILENT = /^\s*NOTHING_TO_REPORT\W*$/
@@ -30,7 +31,12 @@ export class Captain {
 
   private mem: Memory
   private cfg: Config
-  private runner: Runner
+  private runnerFor: (p: Provider) => Runner
+  private runners = new Map<string, Runner>()
+  /** Provider the current/next session runs on. */
+  private providerId: string
+  /** Overridable in tests; cooldown math uses it. */
+  clock: () => number = () => Date.now()
   private lockPath: string
   private chain: Promise<unknown> = Promise.resolve()
   private pending: LedgerEntry[] = []
@@ -39,12 +45,60 @@ export class Captain {
   /** Set by the web server, which runs the agent supervisor: live summary for the prompt, and where the agent tools reach it. */
   agents?: { summary: () => string; url: string; token?: string }
 
-  constructor(mem: Memory, cfg: Config, runner: Runner) {
+  /** `runnerFor` builds (or returns) the Runner for a provider in the chain. */
+  constructor(mem: Memory, cfg: Config, runnerFor: (p: Provider) => Runner) {
     this.mem = mem
     this.cfg = cfg
-    this.runner = runner
+    this.runnerFor = runnerFor
+    this.providerId = cfg.captainChain[0].id
     mkdirSync(cfg.dataDir, { recursive: true })
     this.lockPath = join(cfg.dataDir, 'captain.lock')
+  }
+
+  private runnerOf(p: Provider): Runner {
+    let r = this.runners.get(p.id)
+    if (!r) this.runners.set(p.id, (r = this.runnerFor(p)))
+    return r
+  }
+
+  // ---- provider chain (failover when one hits its usage limit) -------------
+
+  private cooldowns(): Record<string, number> {
+    try {
+      return JSON.parse(this.mem.metaGet('captain_cooldowns') ?? '{}') as Record<string, number>
+    } catch {
+      return {}
+    }
+  }
+
+  private cooldown(id: string): void {
+    const c = this.cooldowns()
+    c[id] = this.clock() + this.cfg.limitCooldownMs
+    this.mem.metaSet('captain_cooldowns', JSON.stringify(c))
+  }
+
+  /** Next provider to try: first in the chain, skipping ones tried this turn and ones cooling down. */
+  private pickProvider(tried: Set<string>): Provider | null {
+    const chain = this.cfg.captainChain
+    const fresh = chain.filter((p) => !tried.has(p.id))
+    if (!fresh.length) return null
+    const cd = this.cooldowns()
+    const ready = fresh.filter((p) => (cd[p.id] ?? 0) <= this.clock())
+    if (ready.length) return ready[0]
+    // All cooling: try the one closest to recovering (its limit may have reset early).
+    return [...fresh].sort((a, b) => (cd[a.id] ?? 0) - (cd[b.id] ?? 0))[0]
+  }
+
+  /** If the live session belongs to a different provider, end it so a fresh one starts on `id`. */
+  private ensureProvider(provider: Provider): void {
+    const cur = this.mem.sessionCurrent()
+    if (cur && this.mem.metaGet('captain_session_provider') !== provider.id) {
+      this.mem.sessionEnd(cur.id, 'provider switch')
+      this.mem.append('rotation', `Captain switched to ${provider.label}`, { session: cur.id, meta: { provider: provider.id } })
+      this.view = newView()
+      this.viewSession = null
+    }
+    this.providerId = provider.id
   }
 
   private systemPrompt(): string {
@@ -80,14 +134,15 @@ export class Captain {
     if (cur) this.mem.sessionEnd(cur.id, 'never used')
     const id = randomUUID()
     this.mem.sessionStart(id)
+    this.mem.metaSet('captain_session_provider', this.providerId)
     this.mem.append('system', `Captain session ${id} started`, { session: id })
     this.view = newView()
     this.viewSession = id
     return { id, fresh: true }
   }
 
-  private call(sessionId: string, resume: boolean, message: string): Promise<TurnResult> {
-    return this.runner.run({ sessionId, resume, message, systemPrompt: this.systemPrompt(), mcpServers: this.mcpServers(sessionId) })
+  private call(runner: Runner, sessionId: string, resume: boolean, message: string): Promise<TurnResult> {
+    return runner.run({ sessionId, resume, message, systemPrompt: this.systemPrompt(), mcpServers: this.mcpServers(sessionId) })
   }
 
   /** Owner message in, reply out (terminal: one message per turn). */
@@ -151,48 +206,70 @@ export class Captain {
   }
 
   private async turn(inputs: LedgerEntry[]): Promise<Reply> {
-    let s = this.session()
-    let prompt = buildTurnPrompt(this.mem, this.cfg, inputs, this.view, s.id, this.agents?.summary() ?? null)
-    let res = await this.call(s.id, !s.fresh, prompt.text)
+    const tried = new Set<string>()
+    for (;;) {
+      const provider = this.pickProvider(tried)
+      if (!provider) {
+        const e = this.failure(inputs, 'every captain provider is at its usage limit; try again later', null)
+        return { text: e.text.replace(/^Captain turn failed: /, ''), ledgerId: e.id, sessionId: '', contextTokens: 0, contextWindow: null, error: true }
+      }
+      this.ensureProvider(provider)
+      const runner = this.runnerOf(provider)
 
-    if (res.isError && res.sessionMissing) {
-      this.mem.append('system', `Captain session ${s.id} is gone (${res.text}); starting fresh`, { session: s.id })
-      this.mem.sessionEnd(s.id, 'missing')
-      s = this.session()
-      prompt = buildTurnPrompt(this.mem, this.cfg, inputs, this.view, s.id, this.agents?.summary() ?? null)
-      res = await this.call(s.id, false, prompt.text)
+      let s = this.session()
+      let prompt = buildTurnPrompt(this.mem, this.cfg, inputs, this.view, s.id, this.agents?.summary() ?? null)
+      let res = await this.call(runner, s.id, !s.fresh, prompt.text)
+
+      if (res.isError && res.sessionMissing) {
+        this.mem.append('system', `Captain session ${s.id} is gone (${res.text}); starting fresh`, { session: s.id })
+        this.mem.sessionEnd(s.id, 'missing')
+        s = this.session()
+        prompt = buildTurnPrompt(this.mem, this.cfg, inputs, this.view, s.id, this.agents?.summary() ?? null)
+        res = await this.call(runner, s.id, false, prompt.text)
+      }
+
+      // Provider at its limit: put it on cooldown and fail over to the next one.
+      if (res.isError && isUsageLimit(res.text)) {
+        this.cooldown(provider.id)
+        this.mem.sessionEnd(s.id, 'provider limit')
+        this.mem.append('system', `${provider.label} hit its usage limit; switching provider`, { session: s.id, meta: { provider: provider.id } })
+        tried.add(provider.id)
+        this.view = newView()
+        this.viewSession = null
+        continue
+      }
+
+      if (res.isError) {
+        const e = this.failure(inputs, res.text, s.id)
+        if (s.fresh) this.mem.sessionEnd(s.id, 'failed first turn')
+        return { text: res.text, ledgerId: e.id, sessionId: s.id, contextTokens: 0, contextWindow: null, error: true }
+      }
+
+      res.text = plainDash(res.text)
+      // After agent events there is often nothing worth telling the owner.
+      const silent = SILENT.test(res.text)
+      const reply = this.mem.append('captain', res.text, {
+        session: s.id,
+        meta: {
+          ...(silent ? { silent: true } : {}),
+          ...(provider.id !== this.cfg.captainChain[0].id ? { provider: provider.id } : {}),
+          reply_to: inputs.map((o) => o.id),
+          context_tokens: res.contextTokens,
+          context_window: res.contextWindow,
+          cost_usd: res.costUsd,
+          recalled: prompt.injected,
+        },
+      })
+      this.mem.sessionTurn(s.id, res.contextTokens, res.contextWindow)
+
+      const out: Reply = { text: res.text, ledgerId: reply.id, sessionId: s.id, contextTokens: res.contextTokens, contextWindow: res.contextWindow }
+      const reason = this.rotationReason(s.id, inputs[0].id, res)
+      if (reason) {
+        await this.rotateUnlocked(reason)
+        out.rotated = reason
+      }
+      return out
     }
-
-    if (res.isError) {
-      const e = this.failure(inputs, res.text, s.id)
-      // A session that never completed a turn does not exist on Claude Code's side.
-      if (s.fresh) this.mem.sessionEnd(s.id, 'failed first turn')
-      return { text: res.text, ledgerId: e.id, sessionId: s.id, contextTokens: 0, contextWindow: null, error: true }
-    }
-
-    res.text = plainDash(res.text)
-    // After agent events there is often nothing worth telling the owner.
-    const silent = SILENT.test(res.text)
-    const reply = this.mem.append('captain', res.text, {
-      session: s.id,
-      meta: {
-        ...(silent ? { silent: true } : {}),
-        reply_to: inputs.map((o) => o.id),
-        context_tokens: res.contextTokens,
-        context_window: res.contextWindow,
-        cost_usd: res.costUsd,
-        recalled: prompt.injected,
-      },
-    })
-    this.mem.sessionTurn(s.id, res.contextTokens, res.contextWindow)
-
-    const out: Reply = { text: res.text, ledgerId: reply.id, sessionId: s.id, contextTokens: res.contextTokens, contextWindow: res.contextWindow }
-    const reason = this.rotationReason(s.id, inputs[0].id, res)
-    if (reason) {
-      await this.rotateUnlocked(reason)
-      out.rotated = reason
-    }
-    return out
   }
 
   private failure(inputs: LedgerEntry[], reason: string, session: string | null): LedgerEntry {
@@ -228,7 +305,9 @@ export class Captain {
     const cur = this.mem.sessionCurrent()
     if (!cur) return
     if (cur.turns > 0) {
-      const res = await this.call(cur.id, true, handoffPrompt(reason))
+      const pid = this.mem.metaGet('captain_session_provider')
+      const provider = this.cfg.captainChain.find((p) => p.id === pid) ?? this.cfg.captainChain[0]
+      const res = await this.call(this.runnerOf(provider), cur.id, true, handoffPrompt(reason))
       if (res.isError) this.mem.append('system', `Handoff turn failed: ${res.text}`, { session: cur.id })
     }
     this.mem.sessionEnd(cur.id, reason)

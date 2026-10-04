@@ -1,5 +1,6 @@
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { parseChain, type Provider } from './captain/provider.ts'
 
 export interface Config {
   /** The assistant's display name, shown in the UI, prompts and agent briefs. */
@@ -29,6 +30,10 @@ export interface Config {
   sleepAt: string
   sleepModel: string
   sleepPromptFile: string
+  /** Primary Claude login first, then fallbacks tried in order on a usage limit. */
+  captainChain: Provider[]
+  /** How long a provider that hit its limit is skipped before it is tried again. */
+  limitCooldownMs: number
 }
 
 const env = process.env
@@ -65,6 +70,8 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     sleepAt: env.JARVIS_SLEEP_AT ?? '04:00',
     sleepModel: env.JARVIS_SLEEP_MODEL || 'haiku',
     sleepPromptFile: env.JARVIS_SLEEP_PROMPT_FILE || resolve(import.meta.dirname, '../prompts/sleep.md'),
+    captainChain: parseChain(env.JARVIS_FALLBACKS, env.CLAUDE_CONFIG_DIR),
+    limitCooldownMs: num('JARVIS_LIMIT_COOLDOWN_MIN', 180) * 60_000,
   }
   const cfg = { ...base, ...overrides }
   if (overrides.dataDir && !overrides.dbPath) cfg.dbPath = join(cfg.dataDir, 'memory.db')

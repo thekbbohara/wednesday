@@ -49,6 +49,7 @@ describe('jarvis MCP server', () => {
         'memory_write',
         'now_get',
         'now_update',
+        'skill_add',
         'task_create',
         'task_get',
         'task_list',
@@ -81,6 +82,18 @@ describe('jarvis MCP server', () => {
     const r = await call('agent_list')
     expect(r.isError).toBe(true)
     expect(text(r)).toMatch(/web server is not running/)
+  })
+
+  it('unlocks a new skill and can tag a task with it in the same session', async () => {
+    expect(text(await call('skill_add', { name: 'OSINT', covers: 'open-source research and due diligence' }))).toMatch(/Added skill osint/)
+    expect(text(await call('task_create', { title: 'Vendor check', goal: 'due diligence', skill: 'osint' }))).toMatch(/\(osint\)/)
+    const dupe = await call('skill_add', { name: 'osint', covers: 'again' })
+    expect(dupe.isError).toBe(true)
+    expect(text(dupe)).toMatch(/already exists/)
+    const mem = new Memory(db)
+    expect(mem.ledgerTail(20, ['system']).some((e) => (e.meta?.skill_new as { id?: string } | undefined)?.id === 'osint')).toBe(true)
+    expect(mem.expBySkill().get('osint')).toBe(5)
+    mem.close()
   })
 
   it('reports errors as tool errors, not crashes', async () => {

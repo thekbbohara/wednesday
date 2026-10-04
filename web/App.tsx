@@ -492,6 +492,20 @@ function RowView({
     case "error":
       return <ErrorNotice item={row.item} retryable={row.retryable} name={jarvisName} />;
     case "levelup": {
+      if (row.item.type === "newskill") {
+        const n = row.item;
+        const sk = skills.get(n.skill) ?? { id: n.skill, name: n.name, color: n.color, covers: "" };
+        return (
+          <div className="agent-row agent-row--levelup" title={fullTime(n.ts)}>
+            <button className="badge badge--mini" aria-label="Open Skills" onClick={onSkills} style={{ background: `color-mix(in srgb, ${sk.color} 16%, transparent)` }}>
+              <SkillIcon skill={sk} size={13} />
+            </button>
+            <span className="agent-row__text">
+              New skill unlocked: <b style={{ color: sk.color }}>{n.name}</b>
+            </span>
+          </div>
+        );
+      }
       const sk = skills.get(row.item.skill);
       const name = row.item.skill === "jarvis" ? jarvisName : (sk?.name ?? row.item.skill);
       const color = row.item.skill === "jarvis" ? "var(--blue-deep)" : (sk?.color ?? OTHER_COLOR);

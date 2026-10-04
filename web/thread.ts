@@ -5,7 +5,7 @@ type Message = Extract<ChatItem, { type: "owner" | "captain" }>;
 type ErrorItem = Extract<ChatItem, { type: "error" }>;
 type AgentItem = Extract<ChatItem, { type: "agent" }>;
 type DigestItem = Extract<ChatItem, { type: "digest" }>;
-type LevelItem = Extract<ChatItem, { type: "levelup" }>;
+type LevelItem = Extract<ChatItem, { type: "levelup" | "newskill" }>;
 
 export type Row =
   | { kind: "day"; key: string; label: string }
@@ -82,6 +82,7 @@ export function buildRows(items: ChatItem[], now = new Date()): { rows: Row[]; t
         lastSide = "owner";
         break;
       case "levelup":
+      case "newskill":
         // A level-up lands mid-turn; receipts keep waiting for the reply.
         rows.push({ kind: "levelup", key: `u${item.id}`, item });
         lastSide = null;

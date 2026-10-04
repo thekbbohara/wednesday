@@ -5,7 +5,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { fileURLToPath } from 'node:url'
 import { dirname } from 'node:path'
-import { DEFAULT_SKILLS, loadSkills, type Skill } from '../skills/skills.ts'
+import { addSkill, DEFAULT_SKILLS, loadSkills, type Skill } from '../skills/skills.ts'
 import { FACT_KINDS, Memory, TASK_STATUSES, type Hit } from '../memory/store.ts'
 
 export interface AgentApi {
@@ -13,10 +13,14 @@ export interface AgentApi {
   token?: string
 }
 
-export function buildServer(mem: Memory, session: string | null, agentApi: AgentApi | null = null, skills: Skill[] = DEFAULT_SKILLS): McpServer {
-  const skillIds = skills.map((s) => s.id) as [string, ...string[]]
+export function buildServer(mem: Memory, session: string | null, agentApi: AgentApi | null = null, skills: Skill[] = DEFAULT_SKILLS, skillsDir?: string): McpServer {
+  // Checked against the live list, so a skill added this turn can be used right away.
+  const liveIds = () => (skillsDir ? loadSkills(skillsDir) : skills).map((s) => s.id)
+  const checkSkill = (s: string) => {
+    if (s !== 'none' && !liveIds().includes(s)) throw new Error(`unknown skill "${s}"; use one of: ${liveIds().join(', ')}, none (or add one with skill_add)`)
+  }
   const skillHelp = `Skill this work trains (earns Jarvis EXP when created and when finished): ${skills.map((s) => `${s.id} (${s.covers})`).join('; ')}. Use "none" only for chores that fit no skill.`
-  const skillArg = z.enum([...skillIds, 'none'] as [string, ...string[]]).describe(skillHelp)
+  const skillArg = z.string().describe(skillHelp)
   const server = new McpServer({ name: 'jarvis', version: '0.1.0' })
 
   const ok = (data: unknown) => ({ content: [{ type: 'text' as const, text: typeof data === 'string' ? data : JSON.stringify(data, null, 2) }] })
@@ -127,8 +131,25 @@ export function buildServer(mem: Memory, session: string | null, agentApi: Agent
       },
     },
     guard(({ skill, ...a }) => {
+      checkSkill(skill)
       const t = mem.taskCreate({ ...a, skill: skill === 'none' ? null : skill }, session)
       return `Created T${t.id}${t.skill ? ` (${t.skill})` : ''}.`
+    }),
+  )
+
+  server.registerTool(
+    'skill_add',
+    {
+      description:
+        'Unlock a new skill in the owner\'s skill tree, when real recurring work fits none of the existing skills (e.g. OSINT, Video, Finance). ' +
+        'Never add near-duplicates of an existing skill; the tree is capped. Tell the owner you added it.',
+      inputSchema: { name: z.string().min(2).max(24), covers: z.string().min(3).max(120), color: z.string().optional() },
+    },
+    guard(({ name, covers, color }) => {
+      if (!skillsDir) throw new Error('skills are not writable here')
+      const sk = addSkill(skillsDir, { name, covers, color })
+      mem.append('system', `New skill unlocked: ${sk.name}`, { session, meta: { skill_new: { id: sk.id, name: sk.name, color: sk.color } } })
+      return `Added skill ${sk.id} (${sk.name}). Tag tasks with it now.`
     }),
   )
 
@@ -147,6 +168,7 @@ export function buildServer(mem: Memory, session: string | null, agentApi: Agent
       },
     },
     guard(({ id, skill, ...patch }) => {
+      if (skill) checkSkill(skill)
       const t = mem.taskUpdate(id, { ...patch, ...(skill ? { skill: skill === 'none' ? undefined : skill } : {}) }, session)
       return `T${t.id} is ${t.status}.`
     }),
@@ -281,6 +303,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   }
   const mem = new Memory(db)
   const url = process.env.JARVIS_URL
-  const server = buildServer(mem, process.env.JARVIS_SESSION || null, url ? { url, token: process.env.JARVIS_TOKEN || undefined } : null, loadSkills(dirname(db)))
+  const server = buildServer(mem, process.env.JARVIS_SESSION || null, url ? { url, token: process.env.JARVIS_TOKEN || undefined } : null, loadSkills(dirname(db)), dirname(db))
   await server.connect(new StdioServerTransport())
 }

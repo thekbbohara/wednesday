@@ -10,7 +10,7 @@ import { parseArgs } from 'node:util'
 import { loadConfig } from '../config.ts'
 import { Memory } from '../memory/store.ts'
 import { Captain } from '../captain/captain.ts'
-import { ClaudeRunner } from '../captain/runner.ts'
+import { buildRunner } from '../captain/chain.ts'
 import { ClaudeSleepModel, runSleep, summaryLine } from '../sleep/sleep.ts'
 import { buildScenario, type Turn } from './scenario.ts'
 import { score, type Verdict } from './score.ts'
@@ -67,7 +67,7 @@ if (args.report) {
 }
 
 const scenario = buildScenario({ turns: setup.turns, seed: setup.seed, plants: setup.plants ?? undefined })
-const captain = new Captain(mem, cfg, new ClaudeRunner({ bin: cfg.claudeBin, model: cfg.model, cwd: cfg.dataDir, allowedTools: cfg.allowedTools, timeoutSec: cfg.turnTimeout }))
+const captain = new Captain(mem, cfg, (p) => buildRunner(p, cfg))
 const sleeper = new ClaudeSleepModel({ bin: cfg.claudeBin, model: cfg.sleepModel, promptFile: cfg.sleepPromptFile, timeoutSec: cfg.turnTimeout, cwd: cfg.dataDir, name: cfg.name })
 const done = new Set(rows.filter((r) => r.type === 'turn').map((r) => r.index))
 

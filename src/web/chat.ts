@@ -11,6 +11,7 @@ export type ChatItem =
   | { type: 'agent'; id: number; ts: string; agent: string; event: string; text: string }
   | { type: 'digest'; id: number; ts: string; text: string }
   | { type: 'levelup'; id: number; ts: string; skill: string; level: number }
+  | { type: 'newskill'; id: number; ts: string; skill: string; name: string; color: string }
 
 const SHOWN = ['owner', 'captain', 'fact', 'task', 'decision', 'now', 'system', 'agent', 'digest'] as const
 /** Agent events the owner sees; the captain's own messages and answers to agents stay in the ledger. */
@@ -58,6 +59,8 @@ export function toChatItem(e: LedgerEntry): ChatItem | null {
     case 'system': {
       const up = e.meta?.levelup as { skill: string; level: number } | undefined
       if (up) return { ...base, type: 'levelup', skill: up.skill, level: up.level }
+      const nu = e.meta?.skill_new as { id: string; name: string; color: string } | undefined
+      if (nu) return { ...base, type: 'newskill', skill: nu.id, name: nu.name, color: nu.color }
       return e.meta?.error ? { ...base, type: 'error', text: e.text.replace(/^Captain turn failed: /, '') } : null
     }
     default:

@@ -67,6 +67,11 @@ Ops. EXP is earned only from real, recorded work:
 | task finished (once per task) | +30 |
 | finished by an agent | +20 more |
 
+**The tree grows by itself.** When real, recurring work fits none of the
+skills, the captain unlocks a new one with its `skill_add` tool (written to
+`<data>/skills.json`), tags the task with it, and tells you; the chat shows
+"New skill unlocked: OSINT". No duplicates, and the tree is capped at 16 skills.
+
 Levels cost 50 more EXP each (Lv 2 at 100, Lv 3 at 250, Lv 4 at 450, ...);
 Jarvis's own level grows on all EXP at a third of the pace. EXP lives in an
 append-only `exp` table, each row pointing at its task, so clicking a skill
@@ -113,6 +118,8 @@ environment. Everything else is environment variables (or `.env`):
 | Variable                  | Default            | Meaning |
 |---------------------------|--------------------|---------|
 | `ASSISTANT_NAME`          | `Jarvis`           | What the assistant calls itself (UI, prompts, agent briefs). |
+| `JARVIS_FALLBACKS`        | none               | Captain fallback chain, e.g. `claude:~/.claude-2,codex`. |
+| `JARVIS_LIMIT_COOLDOWN_MIN` | `180`            | Minutes a usage-limited provider is skipped before retry. |
 | `JARVIS_DATA_DIR`         | `~/.jarvis`        | Holds `memory.db`; also the captain's working directory. |
 | `JARVIS_MODEL`            | `opus`             | Captain model. |
 | `JARVIS_ROTATE_AT`        | `0.4`              | Rotate when context passes this fraction of the window. |
@@ -204,6 +211,33 @@ bash skills/osint/scripts/diagnose.sh     # what's available
 Then ask, e.g. "what's exposed about example.com", "due diligence on this
 vendor", or "build a dossier on <client I'm meeting>". Turn web access on in
 Settings so the worker can search.
+
+## Captain fallback chain
+
+The captain runs on the Claude Code harness. If your Claude login hits its
+usage limit, it fails over to the next provider in a chain, keeps going, and
+returns to the primary once the limit cools off. Set the chain in `.env`:
+
+```sh
+JARVIS_FALLBACKS=claude:~/.claude-2,codex     # primary Claude is always first
+```
+
+- `claude:<config dir>` - another Claude account (its own `CLAUDE_CONFIG_DIR`).
+  Same harness, so rotation, memory and token tracking keep working fully.
+- `codex[:model]` - the Codex CLI (a different provider entirely). Codex can be
+  a captain: it reaches the memory tools over MCP and resumes sessions. Two
+  caveats: it reports no context window, so on Codex the captain rotates on its
+  turn cap instead of context %; and it runs with
+  `--dangerously-bypass-approvals-and-sandbox` (the one automation flag `codex
+  exec` and `exec resume` share), which lets Codex run shell freely. It only
+  runs when you add `codex` to the chain and Claude is exhausted. If you are not
+  comfortable with that, leave Codex out and use extra Claude accounts instead.
+
+A switch is just a session rotation onto the next provider, rebuilt from
+memory. `kimi`, `opencode` and `agy` are not captain providers (no headless
+MCP); they remain worker runtimes. On a usage-limit error the current provider
+is put on cooldown (`JARVIS_LIMIT_COOLDOWN_MIN`, default 180) and the next is
+tried; when all are limited the captain says so.
 
 ## Multiple Claude accounts
 
