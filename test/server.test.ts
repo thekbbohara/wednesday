@@ -90,15 +90,18 @@ describe('web server', () => {
     const { mem, app, close } = setup()
     mem.append('owner', 'remember the tea')
     const f = mem.factWrite({ kind: 'preference', subject: 'tea', body: 'ilam green', source: 'L1' })
-    mem.taskCreate({ title: 'buy tea', goal: 'restock' })
+    const t = mem.taskCreate({ title: 'buy tea', goal: 'restock' })
+    // A result that mentions "created" is still a finish, not a creation.
+    mem.taskUpdate(t.id, { status: 'done', result: 'order created and paid' })
     mem.append('captain', `Saved [F${f.id}]`)
     const page = await json(app.request('/api/chat'))
     expect(page.items.filter((i: { type: string }) => i.type === 'receipt').map((i: { verb: string; ref: string }) => `${i.verb} ${i.ref}`)).toEqual([
       'saved F1',
       'created T1',
+      'finished T1',
     ])
     expect(await json(app.request('/api/ref/F1'))).toMatchObject({ ref: 'F1', title: 'tea', body: 'ilam green', source: 'L1' })
-    expect(await json(app.request('/api/ref/T1'))).toMatchObject({ title: 'buy tea (open)' })
+    expect(await json(app.request('/api/ref/T1'))).toMatchObject({ title: 'buy tea (done)' })
     expect(await json(app.request('/api/ref/L1'))).toMatchObject({ title: 'You said', body: 'remember the tea' })
     expect((await app.request('/api/ref/F99')).status).toBe(404)
     const d = mem.append('decision', 'Decision: Use SQLite. Reason: one file')
@@ -141,6 +144,86 @@ describe('web server', () => {
     const signin = await app.request('/?token=s3cret')
     expect(signin.headers.get('set-cookie')).toMatch(/jarvis_token=s3cret; .*HttpOnly/)
     expect((await app.request('/api/chat', { headers: { cookie: 'jarvis_token=s3cret' } })).status).toBe(200)
+    close()
+  })
+})
+
+describe('web server with agents', () => {
+  it('spawns through the API, wakes the captain on a report, and keeps silent replies out of the chat', { timeout: 30_000 }, async () => {
+    const { Supervisor } = await import('../src/agents/supervisor.ts')
+    const { writeFileSync } = await import('node:fs')
+    const dataDir = mkdtempSync(join(tmpdir(), 'jarvis-srv-agents-'))
+    writeFileSync(join(dataDir, 'runtimes.json'), JSON.stringify([{ id: 'fake', command: `bash ${join(import.meta.dirname, '../src/agents/fixtures/fake-agent.sh')}` }]))
+    const cfg = loadConfig({ dataDir })
+    const mem = new Memory(cfg.dbPath)
+    const socket = `jarvis-srv-${process.pid}`
+    const sup = new Supervisor({ mem, dataDir, socket, hook: null, pollMs: 100, timings: { briefSettleMs: 300 } })
+    const runner = new GatedRunner()
+    const { app, captain, close } = createApp({ mem, cfg, runner, supervisor: sup, selfUrl: 'http://127.0.0.1:1', pollMs: 50 })
+    const post = (path: string, body: unknown) => app.request(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+    try {
+      const t = mem.taskCreate({ title: 'Count files', goal: 'g' })
+      const spawned = await post('/api/agents', { id: 'counter', runtime: 'fake', cwd: dataDir, brief: 'count files', task_id: t.id })
+      expect(spawned.status).toBe(200)
+      expect((await json(spawned)).text).toMatch(/^Started counter on fake in /)
+      expect((await post('/api/agents', { id: 'counter', runtime: 'fake', cwd: dataDir, brief: 'x' })).status).toBe(409)
+
+      // The hook reports; the captain is woken with the event and the live agents block.
+      expect((await post('/api/hooks/turn', { agent: 'counter', source: 'claude', message: 'There are 3 files.' })).status).toBe(200)
+      await until(() => runner.calls.length === 1)
+      const msg = runner.calls[0].message
+      expect(msg).toMatch(/<agents note="live, from the supervisor">\ncounter \[\w+\] fake T1 - /)
+      expect(msg).toMatch(/<agent_event id="L\d+" agent="counter" event="report"[^>]*>\ncounter reported:\nThere are 3 files\.\n<\/agent_event>/)
+      expect(runner.calls[0].mcpServers.jarvis.env.JARVIS_URL).toBe('http://127.0.0.1:1')
+      await runner.finish({ text: 'NOTHING_TO_REPORT' })
+      await until(() => !captain.busy)
+
+      const items = (await json(app.request('/api/chat'))).items as { type: string; event?: string; text?: string }[]
+      expect(items.map((i) => (i.type === 'agent' ? `agent:${i.event}:${i.text}` : i.type))).toEqual([
+        'receipt',
+        expect.stringMatching(/^agent:spawn:started on fake for T1 in /),
+        'agent:report:finished a turn',
+      ])
+
+      const detail = await json(app.request('/api/agents/counter'))
+      expect(detail).toMatchObject({ agent: { id: 'counter', task_id: 1 }, task: { id: 1, title: 'Count files' }, lastReport: { text: 'There are 3 files.' } })
+      const status = (await json(app.request('/api/chat'))).status
+      expect(status.agents).toEqual([expect.objectContaining({ id: 'counter', runtime: 'fake', task: 1 })])
+
+      expect((await post('/api/agents/counter/stop', { remove: true })).status).toBe(200)
+      expect((await json(app.request('/api/agents'))).agents).toEqual([])
+      expect((await app.request('/api/agents/counter')).status).toBe(404)
+    } finally {
+      close()
+      const { execFileSync } = await import('node:child_process')
+      try {
+        execFileSync('tmux', ['-L', socket, 'kill-server'], { stdio: 'ignore' })
+      } catch {}
+    }
+  })
+
+  it('answers 503 for agent calls when no supervisor runs', async () => {
+    const { app, close } = setup()
+    expect((await app.request('/api/agents')).status).toBe(503)
+    close()
+  })
+})
+
+describe('static files', () => {
+  it('never lets the page go stale, and caches hashed bundles forever', async () => {
+    const { mkdirSync, writeFileSync } = await import('node:fs')
+    const web = mkdtempSync(join(tmpdir(), 'jarvis-web-'))
+    mkdirSync(join(web, 'assets'))
+    writeFileSync(join(web, 'index.html'), '<title>Jarvis</title>')
+    writeFileSync(join(web, 'assets', 'index-abc.js'), 'x')
+    const dataDir = mkdtempSync(join(tmpdir(), 'jarvis-srv-'))
+    const cfg = loadConfig({ dataDir })
+    const { app, close } = createApp({ mem: new Memory(cfg.dbPath), cfg, runner: new GatedRunner(), webRoot: web })
+    const page = await app.request('/')
+    expect(await page.text()).toContain('Jarvis')
+    expect(page.headers.get('cache-control')).toBe('no-cache')
+    expect((await app.request('/some/route')).headers.get('cache-control')).toBe('no-cache')
+    expect((await app.request('/assets/index-abc.js')).headers.get('cache-control')).toMatch(/immutable/)
     close()
   })
 })

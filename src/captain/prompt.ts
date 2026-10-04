@@ -26,10 +26,18 @@ export interface BuiltPrompt {
   injected: string[]
 }
 
-export function buildTurnPrompt(mem: Memory, cfg: Config, owners: LedgerEntry[], view: SessionView, sessionId: string): BuiltPrompt {
-  if (!owners.length) throw new Error('a turn needs at least one owner message')
-  const owner = owners[0]
-  const query = owners.map((o) => o.text).join('\n')
+export function buildTurnPrompt(
+  mem: Memory,
+  cfg: Config,
+  inputs: LedgerEntry[],
+  view: SessionView,
+  sessionId: string,
+  /** Live agent summary from the supervisor; null when agents are unavailable (no web server). */
+  agents: string | null = null,
+): BuiltPrompt {
+  if (!inputs.length) throw new Error('a turn needs at least one input')
+  const owner = inputs[0]
+  const query = inputs.map((o) => o.text.slice(0, 2000)).join('\n')
   const parts: string[] = []
   const injected: string[] = []
   const fresh = !view.primed
@@ -72,10 +80,14 @@ export function buildTurnPrompt(mem: Memory, cfg: Config, owners: LedgerEntry[],
     )
   }
 
-  for (const o of owners) view.seen.add(`L${o.id}`)
+  for (const o of inputs) view.seen.add(`L${o.id}`)
   const header = parts.length ? `<memory>\n${parts.join('\n\n')}\n</memory>\n\n` : ''
-  const messages = owners.map((o) => `<owner_message id="L${o.id}" at="${o.ts}">\n${o.text}\n</owner_message>`).join('\n')
-  return { text: header + messages, injected }
+  const live =
+    agents === null
+      ? '<agents>unavailable: the Jarvis web server is not running, so agent tools will fail</agents>\n\n'
+      : `<agents note="live, from the supervisor">\n${agents || '(none)'}\n</agents>\n\n`
+  const messages = inputs.map(fmtInput).join('\n')
+  return { text: header + live + messages, injected }
 }
 
 export function handoffPrompt(reason: string): string {
@@ -89,7 +101,9 @@ export function handoffPrompt(reason: string): string {
 
 /** Most recent conversation before `beforeId`, oldest first, within a char budget. */
 export function conversationTail(mem: Memory, beforeId: number, limit: number, budget: number): LedgerEntry[] {
-  const rows = mem.ledgerTail(limit + 1, CONVERSATION_KINDS).filter((e) => e.id < beforeId)
+  const rows = mem
+    .ledgerTail(limit * 4 + 1, CONVERSATION_KINDS)
+    .filter((e) => e.id < beforeId && inTail(e))
   const out: LedgerEntry[] = []
   let used = 0
   for (let i = rows.length - 1; i >= 0 && out.length < limit; i--) {
@@ -99,6 +113,20 @@ export function conversationTail(mem: Memory, beforeId: number, limit: number, b
     out.unshift(rows[i])
   }
   return out
+}
+
+function fmtInput(e: LedgerEntry): string {
+  if (e.kind === 'agent') {
+    return `<agent_event id="L${e.id}" agent="${e.meta?.agent}" event="${e.meta?.event}" at="${e.ts}">\n${e.text}\n</agent_event>`
+  }
+  return `<owner_message id="L${e.id}" at="${e.ts}">\n${e.text}\n</owner_message>`
+}
+
+/** Conversation worth carrying into a fresh session: no silent replies, and only agent events that needed the captain. */
+function inTail(e: LedgerEntry): boolean {
+  if (e.kind === 'captain') return !e.meta?.silent
+  if (e.kind === 'agent') return ['report', 'needs', 'exit', 'error'].includes(String(e.meta?.event))
+  return true
 }
 
 function lastNowAuthor(mem: Memory): string | null {

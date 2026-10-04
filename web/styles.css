@@ -67,7 +67,7 @@ button {
   overflow: hidden;
 }
 
-.strip__inner,
+.hero,
 .thread__inner,
 .composer-wrap {
   width: 100%;
@@ -76,77 +76,179 @@ button {
   padding: 0 var(--gutter);
 }
 
-/* ---------- strip ---------- */
+/* ---------- hero card (agent-hq) ---------- */
 
-.strip {
-  background: var(--panel);
-  box-shadow: var(--shadow);
+.hero {
+  padding-top: calc(16px + env(safe-area-inset-top));
   position: relative;
   z-index: 2;
-  padding-top: env(safe-area-inset-top);
 }
 
-.strip__inner {
-  height: 56px;
+.hero__card {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 20px;
+  background: var(--panel);
+  border-radius: 22px;
+  box-shadow: var(--shadow);
+  padding: 16px 20px;
 }
 
-.strip__me {
+.hero__me {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex: none;
-}
-
-.strip__who {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.15;
-}
-
-.strip__name {
-  font: 600 17px/1.15 var(--display);
-  letter-spacing: 0.01em;
-}
-
-.strip__state {
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.strip__state--working {
-  color: var(--blue-deep);
-}
-
-.strip__state--error {
-  color: #d94848;
-}
-
-.strip__agents {
-  list-style: none;
-  /* room for the corner badges, which overhang each face by 4px */
-  margin: 0 -4px 0 0;
-  padding: 6px 4px 4px;
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  scrollbar-width: none;
+  gap: 16px;
   min-width: 0;
 }
 
-.strip__agent {
-  position: relative;
-  flex: none;
-  border-radius: 9px;
-  padding: 2px;
+.hero__info {
+  min-width: 0;
+}
+
+.hero__name {
+  margin: 0 0 6px;
+  font: 600 22px/1.1 var(--display);
+  letter-spacing: 0.005em;
+}
+
+.hero__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.hero__active {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 7px;
+  background: var(--panel-2);
+  font: 500 12px/1 var(--mono);
+  color: var(--ink);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 9px 0 8px;
+  border-radius: 999px;
+  font: 600 12px/1 var(--ui);
+  white-space: nowrap;
+  --tone: var(--mint);
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+  color: color-mix(in srgb, var(--tone) 70%, var(--ink));
+}
+
+.pill i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tone);
+}
+
+.pill--working {
+  --tone: var(--blue-deep);
+}
+
+.pill--needs {
+  --tone: var(--amber);
+}
+
+.pill--error {
+  --tone: var(--coral);
+}
+
+.pill--offline {
+  --tone: var(--faint);
+}
+
+.crew {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  margin: 0;
+}
+
+.crew--empty {
+  font-size: 13px;
+  color: var(--faint);
+}
+
+.crew__faces {
+  list-style: none;
+  /* room for the corner badges, which overhang each face by 4px */
+  margin: -6px -4px 0 0;
+  padding: 6px 4px 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  max-height: calc(2 * 32px + 8px + 6px);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.crew__face {
+  display: block;
+  border: 0;
+  padding: 0;
+  background: none;
+  border-radius: 10px;
+  transition: transform 0.2s var(--ease);
+}
+
+.crew__face:hover {
+  transform: translateY(-1px);
+}
+
+.crew__stats {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.crew__stats i {
+  font-style: normal;
+  margin: 0 6px;
+  color: var(--faint);
+}
+
+.crew__stats b {
+  font-weight: 600;
+}
+
+.c-mint {
+  color: #2fae84;
+}
+
+.c-amber {
+  color: #e09a2b;
+}
+
+.c-coral {
+  color: #e45454;
+}
+
+.c-amber-text {
+  color: #b07a12;
 }
 
 .tip {
   position: fixed;
-  top: calc(env(safe-area-inset-top) + 50px);
   z-index: 3;
   white-space: nowrap;
   background: var(--ink);
@@ -168,12 +270,14 @@ button {
 
 .thread {
   overflow-y: auto;
+  /* soft edge under the hero card instead of a hard cut */
+  mask-image: linear-gradient(to bottom, transparent 0, #000 16px);
   overscroll-behavior: contain;
   min-height: 0;
 }
 
 .thread__inner {
-  padding-top: 8px;
+  padding-top: 12px;
   padding-bottom: 20px;
   display: flex;
   flex-direction: column;
@@ -425,6 +529,113 @@ button.chip:hover {
 
 .bubble--dots i:nth-child(3) {
   animation-delay: 0.3s;
+}
+
+/* ---------- agent rows ---------- */
+
+.agent-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0 4px;
+  font-size: 13px;
+  color: var(--muted);
+  animation: rise 0.2s var(--ease);
+}
+
+.agent-row b {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.agent-row__text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.agent-row--needs .agent-row__text {
+  color: #b07a12;
+}
+
+.agent-row--error .agent-row__text {
+  color: #c43c3c;
+}
+
+.agent-row + .agent-row {
+  margin-top: 6px;
+}
+
+/* ---------- agent popover ---------- */
+
+.agent-pop {
+  width: min(340px, calc(100vw - 52px));
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  margin: 10px 0 0;
+  font-size: 13px;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mono {
+  font: 12px/1.6 var(--mono);
+}
+
+.micro {
+  margin: 0 0 4px;
+  font: 600 11px/1.2 var(--ui);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+.agent-pop__report {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.agent-pop__text {
+  margin: 0;
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: calc(8 * 1.55em);
+  overflow-y: auto;
+}
+
+.agent-pop__none {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--faint);
+}
+
+.ghost {
+  margin-top: 12px;
+  width: 100%;
+  height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--panel-2);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.2s var(--ease);
+}
+
+.ghost:hover {
+  background: #e9edf4;
 }
 
 /* ---------- notice ---------- */
@@ -751,8 +962,49 @@ button.chip:hover {
     --gutter: 12px;
   }
 
-  .strip__inner {
-    height: 52px;
+  .hero {
+    padding-top: calc(8px + env(safe-area-inset-top));
+  }
+
+  .hero__card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 18px;
+  }
+
+  .hero__me {
+    gap: 12px;
+  }
+
+  .hero__name {
+    font-size: 19px;
+    margin-bottom: 4px;
+  }
+
+  .crew {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .crew--empty {
+    display: none;
+  }
+
+  .crew__faces {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-height: none;
+    justify-content: flex-start;
+    margin: -6px 0 0 -4px;
+  }
+
+  .crew__stats {
+    flex: none;
   }
 
   .bubble--owner {

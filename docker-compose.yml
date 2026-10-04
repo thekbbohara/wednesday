@@ -1,5 +1,6 @@
 # Web chat:        docker compose up -d        -> http://127.0.0.1:4788
 # Terminal chat:   docker compose exec jarvis node src/cli.ts
+# Watch an agent:  docker compose exec jarvis tmux -L jarvis attach -t jarvis_<name>
 services:
   jarvis:
     build:
@@ -19,9 +20,15 @@ services:
     volumes:
       # Memory. A named volume by default; to use a host folder, create it first (mkdir) and set JARVIS_DATA.
       - ${JARVIS_DATA:-jarvis-data}:/data
-      # Claude Code login (and its session transcripts).
+      # Claude Code and Codex logins (and their session transcripts).
       - ${HOME}/.claude:/home/node/.claude
       - ${HOME}/.claude.json:/home/node/.claude.json
+      - ${HOME}/.codex:/home/node/.codex
+      # Your git identity, for the agents' commits.
+      - ${HOME}/.gitconfig:/home/node/.gitconfig:ro
+      # Projects agents work on, at the same path as on the host, so the paths
+      # you mention in the chat mean the same thing inside the container.
+      - ${PROJECTS_DIR:-${HOME}/projects}:${PROJECTS_DIR:-${HOME}/projects}
 
 volumes:
   jarvis-data:

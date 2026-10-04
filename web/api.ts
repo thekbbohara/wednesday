@@ -1,18 +1,39 @@
 export type ChatItem =
   | { type: "owner" | "captain"; id: number; ts: string; text: string }
   | { type: "receipt"; id: number; ts: string; verb: string; ref: string }
-  | { type: "error"; id: number; ts: string; text: string };
+  | { type: "error"; id: number; ts: string; text: string }
+  | { type: "agent"; id: number; ts: string; agent: string; event: string; text: string };
 
 export interface Agent {
   id: string;
   name: string;
   runtime: string;
   state: "idle" | "working" | "needs" | "error" | "offline";
+  reason: string | null;
+  task: number | null;
 }
 
 export interface Status {
   thinking: boolean;
   agents: Agent[];
+  model: string;
+  lastReplyAt: string | null;
+}
+
+export interface AgentDetail {
+  agent: {
+    id: string;
+    runtime: string;
+    cwd: string;
+    repo: string | null;
+    branch: string | null;
+    mood: Agent["state"];
+    reason: string | null;
+    attach: string;
+    status: string;
+  };
+  task: { id: number; title: string; status: string } | null;
+  lastReport: { id: number; ts: string; text: string } | null;
 }
 
 export interface RefInfo {
@@ -44,6 +65,7 @@ export const api = {
       json<{ ok: true }>(r),
     ),
   ref: (ref: string) => fetch(`/api/ref/${encodeURIComponent(ref)}`).then((r) => json<RefInfo>(r)),
+  agent: (id: string) => fetch(`/api/agents/${encodeURIComponent(id)}`).then((r) => json<AgentDetail>(r)),
 };
 
 /** Merge by id, keeping ledger order. */

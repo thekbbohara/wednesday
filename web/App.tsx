@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { api, mergeItems, RUNTIME_COLOR, type Agent, type ChatItem, type RefInfo, type Status } from "./api";
+import { api, mergeItems, RUNTIME_COLOR, type Agent, type AgentDetail, type ChatItem, type RefInfo, type Status } from "./api";
 import { Face, type Mood } from "./Face";
 import { buildRows, fullTime, splitCitations, type Row } from "./thread";
 
@@ -14,10 +14,10 @@ type Receipt = Extract<ChatItem, { type: "receipt" }>;
 export function App() {
   const [items, setItems] = useState<ChatItem[]>([]);
   const [hasMore, setHasMore] = useState(false);
-  const [status, setStatus] = useState<Status>({ thinking: false, agents: [] });
+  const [status, setStatus] = useState<Status>({ thinking: false, agents: [], model: "", lastReplyAt: null });
   const [online, setOnline] = useState(true);
   const [loaded, setLoaded] = useState(false);
-  const [popover, setPopover] = useState<{ ref: string; x: number; y: number } | null>(null);
+  const [popover, setPopover] = useState<PopoverTarget | null>(null);
   const [unseen, setUnseen] = useState(false);
 
   const scroller = useRef<HTMLDivElement>(null);
@@ -132,8 +132,18 @@ export function App() {
     e.preventDefault();
     e.stopPropagation();
     const r = e.currentTarget.getBoundingClientRect();
-    setPopover((p) => (p?.ref === ref ? null : { ref, x: r.left, y: r.bottom }));
+    setPopover((p) => (p?.kind === "ref" && p.ref === ref ? null : { kind: "ref", ref, x: r.left, y: r.bottom }));
   };
+
+  const openAgent = (id: string, e: MouseEvent<HTMLElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const r = e.currentTarget.getBoundingClientRect();
+    // Header faces sit at the right edge, so their popover hangs left from the face's right side.
+    setPopover((p) => (p?.kind === "agent" && p.id === id ? null : { kind: "agent", id, x: r.right, y: r.bottom, alignEnd: true }));
+  };
+
+  const colors = useMemo(() => new Map(status.agents.map((a) => [a.id, RUNTIME_COLOR[a.runtime] ?? OTHER_COLOR])), [status.agents]);
 
   const closePopover = useCallback(() => setPopover(null), []);
 
@@ -145,27 +155,14 @@ export function App() {
 
   return (
     <div className="app">
-      <header className="strip">
-        <div className="strip__inner">
-          <div className="strip__me">
-            <Face id="jarvis" mood={mood} color={JARVIS_COLOR} size={36} badge={false} />
-            <div className="strip__who">
-              <span className="strip__name">Jarvis</span>
-              <span className={`strip__state strip__state--${mood}`} aria-live="polite">
-                {stateText}
-              </span>
-            </div>
-          </div>
-          <Agents agents={status.agents} />
-        </div>
-      </header>
+      <Hero mood={mood} stateText={stateText} status={status} onAgent={openAgent} />
 
       <main className="thread" ref={scroller} onScroll={onScroll}>
         <div className="thread__inner">
           {hasMore && <div className="thread__more">Loading earlier messages</div>}
           {loaded && !items.length && <Empty />}
           {rows.map((row) => (
-            <RowView key={row.key} row={row} onRef={openRef} />
+            <RowView key={row.key} row={row} onRef={openRef} colors={colors} />
           ))}
           {status.thinking && <Pending receipts={trailing} onRef={openRef} />}
           {!status.thinking && trailing.length > 0 && <Receipts receipts={trailing} onRef={openRef} />}
@@ -184,45 +181,128 @@ export function App() {
         <Composer onSend={send} />
       </footer>
 
-      {popover && <RefPopover target={popover.ref} x={popover.x} y={popover.y} onClose={closePopover} />}
+      {popover && (
+        <Popover x={popover.x} y={popover.y} alignEnd={popover.kind === "agent"} label={popover.kind === "ref" ? popover.ref : popover.id} onClose={closePopover}>
+          {popover.kind === "ref" ? <RefBody target={popover.ref} /> : <AgentBody id={popover.id} onRef={openRef} />}
+        </Popover>
+      )}
     </div>
   );
 }
 
-function Agents({ agents }: { agents: Agent[] }) {
-  // The tooltip lives outside the scrolling list, which would clip it.
-  const [tip, setTip] = useState<{ agent: Agent; right: number } | null>(null);
-  if (!agents.length) return null;
-  const show = (a: Agent) => (e: { currentTarget: HTMLElement }) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    setTip({ agent: a, right: Math.max(8, innerWidth - r.right) });
-  };
-  const live = tip && agents.find((a) => a.id === tip.agent.id);
+type PopoverTarget = { kind: "ref"; ref: string; x: number; y: number } | { kind: "agent"; id: string; x: number; y: number; alignEnd: true };
+
+const OTHER_COLOR = "#8fb3c9";
+
+/** agent-hq's hero card: who Jarvis is, what it is doing, and its crew. */
+function Hero({ mood, stateText, status, onAgent }: { mood: Mood; stateText: string; status: Status; onAgent: OnAgent }) {
+  const narrow = useNarrow();
+  const now = useNow(30_000);
   return (
-    <>
-      <ul className="strip__agents" aria-label="Agents" onScroll={() => setTip(null)}>
+    <header className="hero">
+      <div className="hero__card">
+        <div className="hero__me">
+          <Face id="jarvis" mood={mood} color={JARVIS_COLOR} size={narrow ? 44 : 64} badge={false} />
+          <div className="hero__info">
+            <h1 className="hero__name">Jarvis</h1>
+            <div className="hero__meta">
+              <span className="tag">captain</span>
+              {status.model && <span className="tag">{status.model}</span>}
+              <span className={`pill pill--${mood}`} aria-live="polite">
+                <i />
+                {stateText}
+              </span>
+              {status.lastReplyAt && <span className="hero__active">Active {ago(status.lastReplyAt, now)}</span>}
+            </div>
+          </div>
+        </div>
+        <Crew agents={status.agents} onAgent={onAgent} size={narrow ? 28 : 32} />
+      </div>
+    </header>
+  );
+}
+
+function Crew({ agents, onAgent, size }: { agents: Agent[]; onAgent: OnAgent; size: number }) {
+  // The tooltip is fixed-positioned so the scrolling row cannot clip it.
+  const [tip, setTip] = useState<{ id: string; right: number; top: number } | null>(null);
+  const count = (m: Mood) => agents.filter((a) => a.state === m).length;
+  const show = (id: string) => (e: { currentTarget: HTMLElement }) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    setTip({ id, right: Math.max(8, innerWidth - r.right), top: r.bottom + 8 });
+  };
+  const live = tip && agents.find((a) => a.id === tip.id);
+  if (!agents.length) return <p className="crew crew--empty">No agents yet</p>;
+  return (
+    <div className="crew">
+      <ul className="crew__faces" aria-label="Agents" onScroll={() => setTip(null)}>
         {agents.map((a) => (
-          <li
-            key={a.id}
-            className="strip__agent"
-            tabIndex={0}
-            aria-label={`${a.name}, ${MOOD_LABEL[a.state]}`}
-            onMouseEnter={show(a)}
-            onMouseLeave={() => setTip(null)}
-            onFocus={show(a)}
-            onBlur={() => setTip(null)}
-          >
-            <Face id={a.id} mood={a.state} color={RUNTIME_COLOR[a.runtime] ?? "#8fb3c9"} size={28} />
+          <li key={a.id}>
+            <button
+              className="crew__face"
+              aria-label={`${a.name}, ${MOOD_LABEL[a.state]}`}
+              onClick={(e) => {
+                setTip(null);
+                onAgent(a.id, e);
+              }}
+              onMouseEnter={show(a.id)}
+              onMouseLeave={() => setTip(null)}
+              onFocus={show(a.id)}
+              onBlur={() => setTip(null)}
+            >
+              <Face id={a.id} mood={a.state} color={RUNTIME_COLOR[a.runtime] ?? OTHER_COLOR} size={size} />
+            </button>
           </li>
         ))}
       </ul>
+      <p className="crew__stats">
+        {agents.length} {agents.length === 1 ? "agent" : "agents"}
+        <i>·</i>
+        <b className="c-mint">{count("working")}</b> working
+        <i>·</i>
+        <b className="c-amber">{count("needs")}</b> {count("needs") === 1 ? "needs" : "need"} you
+        {count("error") > 0 && (
+          <>
+            <i>·</i>
+            <b className="c-coral">{count("error")}</b> errored
+          </>
+        )}
+      </p>
       {live && (
-        <span className="tip" role="tooltip" style={{ right: tip.right }}>
+        <span className="tip" role="tooltip" style={{ right: tip.right, top: tip.top }}>
           {live.name} <span className="tip__state">{MOOD_LABEL[live.state]}</span>
         </span>
       )}
-    </>
+    </div>
   );
+}
+
+function useNarrow(): boolean {
+  const query = "(max-width: 759px)";
+  const [narrow, setNarrow] = useState(() => matchMedia(query).matches);
+  useEffect(() => {
+    const mq = matchMedia(query);
+    const on = () => setNarrow(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return narrow;
+}
+
+function useNow(everyMs: number): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), everyMs);
+    return () => clearInterval(t);
+  }, [everyMs]);
+  return now;
+}
+
+function ago(ts: string, now: number): string {
+  const s = Math.max(0, (now - new Date(ts).getTime()) / 1000);
+  if (s < 45) return "just now";
+  if (s < 3600) return `${Math.round(s / 60)}m ago`;
+  if (s < 86_400) return `${Math.round(s / 3600)}h ago`;
+  return `${Math.round(s / 86_400)}d ago`;
 }
 
 const MOOD_LABEL: Record<Mood, string> = { idle: "idle", working: "working", needs: "needs you", error: "error", offline: "offline" };
@@ -238,8 +318,9 @@ function Empty() {
 }
 
 type OnRef = (ref: string, e: MouseEvent<HTMLElement>) => void;
+type OnAgent = (id: string, e: MouseEvent<HTMLElement>) => void;
 
-function RowView({ row, onRef }: { row: Row; onRef: OnRef }) {
+function RowView({ row, onRef, colors }: { row: Row; onRef: OnRef; colors: Map<string, string> }) {
   switch (row.kind) {
     case "day":
       return (
@@ -278,6 +359,22 @@ function RowView({ row, onRef }: { row: Row; onRef: OnRef }) {
       );
     case "error":
       return <ErrorNotice item={row.item} retryable={row.retryable} />;
+    case "agent": {
+      const { item } = row;
+      const tone = item.event === "needs" ? " agent-row--needs" : item.event === "error" ? " agent-row--error" : "";
+      const mood: Mood = item.event === "needs" ? "needs" : item.event === "error" ? "error" : item.event === "exit" || item.event === "stop" ? "offline" : "idle";
+      return (
+        <div className={`agent-row${tone}`} title={fullTime(item.ts)}>
+          <Face id={item.agent} mood={mood} color={colors.get(item.agent) ?? OTHER_COLOR} size={20} badge={false} />
+          <span className="agent-row__text">
+            <b>{item.agent}</b> {item.text}
+          </span>
+          <button className="chip" onClick={(e) => onRef(`L${item.id}`, e)}>
+            L{item.id}
+          </button>
+        </div>
+      );
+    }
   }
 }
 
@@ -436,27 +533,27 @@ function remarkCitations() {
   return (tree: MdNode) => walk(tree);
 }
 
-function RefPopover({ target, x, y, onClose }: { target: string; x: number; y: number; onClose: () => void }) {
-  const [info, setInfo] = useState<RefInfo | null>(null);
-  const [err, setErr] = useState("");
+/** A small panel anchored under what was clicked; closes on Esc or a click outside. */
+function Popover({ x, y, alignEnd = false, label, onClose, children }: { x: number; y: number; alignEnd?: boolean; label: string; onClose: () => void; children: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: x, top: y + 8 });
 
-  useEffect(() => {
-    setInfo(null);
-    setErr("");
-    api.ref(target).then(setInfo, (e) => setErr((e as Error).message));
-  }, [target]);
-
+  // Re-measure whenever the content changes size (it loads after opening).
   useLayoutEffect(() => {
     const el = box.current;
     if (!el) return;
-    const w = el.offsetWidth;
-    const h = el.offsetHeight;
-    const left = Math.max(12, Math.min(x, innerWidth - w - 12));
-    const top = y + 8 + h > innerHeight - 12 ? Math.max(12, y - h - 36) : y + 8;
-    setPos({ left, top });
-  }, [x, y, info, err]);
+    const place = () => {
+      const w = el.offsetWidth;
+      const h = el.offsetHeight;
+      const left = Math.max(12, Math.min(alignEnd ? x - w : x, innerWidth - w - 12));
+      const top = y + 8 + h > innerHeight - 12 ? Math.max(12, y - h - 36) : y + 8;
+      setPos((p) => (p.left === left && p.top === top ? p : { left, top }));
+    };
+    place();
+    const ro = new ResizeObserver(place);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [x, y, alignEnd]);
 
   useEffect(() => {
     const key = (e: globalThis.KeyboardEvent) => e.key === "Escape" && onClose();
@@ -470,25 +567,117 @@ function RefPopover({ target, x, y, onClose }: { target: string; x: number; y: n
   }, [onClose]);
 
   return (
-    <div className="popover" ref={box} style={pos} role="dialog" aria-label={target}>
-      {err ? (
-        <p className="popover__body">{err === "not found" ? `I have no record ${target}.` : err}</p>
-      ) : !info ? (
-        <p className="popover__body popover__body--muted">Loading {target}</p>
+    <div className="popover" ref={box} style={pos} role="dialog" aria-label={label}>
+      {children}
+    </div>
+  );
+}
+
+function RefBody({ target }: { target: string }) {
+  const [info, setInfo] = useState<RefInfo | null>(null);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    setInfo(null);
+    setErr("");
+    api.ref(target).then(setInfo, (e) => setErr((e as Error).message));
+  }, [target]);
+
+  if (err) return <p className="popover__body">{err === "not found" ? `I have no record ${target}.` : err}</p>;
+  if (!info) return <p className="popover__body popover__body--muted">Loading {target}</p>;
+  return (
+    <>
+      <div className="popover__head">
+        <span className="chip chip--static">{info.ref}</span>
+        <span className="popover__title">{info.title}</span>
+        {info.stale && <span className="popover__stale">outdated</span>}
+      </div>
+      <p className="popover__body">{info.body}</p>
+      <p className="popover__meta">
+        {info.date ? fullTime(info.date) : ""}
+        {info.source ? ` · from ${info.source}` : ""}
+      </p>
+    </>
+  );
+}
+
+function AgentBody({ id, onRef }: { id: string; onRef: OnRef }) {
+  const [d, setD] = useState<AgentDetail | null>(null);
+  const [err, setErr] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  // Live while open: state and reports change under it.
+  useEffect(() => {
+    let stop = false;
+    const load = () =>
+      api.agent(id).then(
+        (x) => !stop && (setD(x), setErr("")),
+        (e) => !stop && setErr((e as Error).message),
+      );
+    void load();
+    const t = setInterval(load, 2000);
+    return () => {
+      stop = true;
+      clearInterval(t);
+    };
+  }, [id]);
+
+  if (err && !d) return <p className="popover__body">{err}</p>;
+  if (!d) return <p className="popover__body popover__body--muted">Loading {id}</p>;
+  const a = d.agent;
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(a.attach);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      prompt("Attach command", a.attach);
+    }
+  };
+  return (
+    <div className="agent-pop">
+      <div className="popover__head">
+        <Face id={a.id} mood={a.mood} color={RUNTIME_COLOR[a.runtime] ?? OTHER_COLOR} size={28} badge={false} />
+        <span className="popover__title">{a.id}</span>
+        <span className={`pill pill--${a.mood}`}>
+          <i />
+          {MOOD_LABEL[a.mood]}
+        </span>
+      </div>
+      <dl className="facts">
+        {d.task && (
+          <>
+            <dt>Task</dt>
+            <dd>
+              <button className="chip" onClick={(e) => onRef(`T${d.task!.id}`, e)}>
+                T{d.task.id}
+              </button>{" "}
+              {d.task.title}
+            </dd>
+          </>
+        )}
+        <dt>Runtime</dt>
+        <dd>{a.runtime}</dd>
+        <dt>{a.branch ? "Branch" : "Folder"}</dt>
+        <dd className="mono">{a.branch ?? a.cwd}</dd>
+        {a.mood === "needs" && a.reason && (
+          <>
+            <dt>Waiting on</dt>
+            <dd className="c-amber-text">{a.reason}</dd>
+          </>
+        )}
+      </dl>
+      {d.lastReport ? (
+        <div className="agent-pop__report">
+          <p className="micro">Last report · {fullTime(d.lastReport.ts)}</p>
+          <p className="agent-pop__text">{d.lastReport.text}</p>
+        </div>
       ) : (
-        <>
-          <div className="popover__head">
-            <span className="chip chip--static">{info.ref}</span>
-            <span className="popover__title">{info.title}</span>
-            {info.stale && <span className="popover__stale">outdated</span>}
-          </div>
-          <p className="popover__body">{info.body}</p>
-          <p className="popover__meta">
-            {info.date ? fullTime(info.date) : ""}
-            {info.source ? ` · from ${info.source}` : ""}
-          </p>
-        </>
+        <p className="agent-pop__none">No report yet.</p>
       )}
+      <button className="ghost" onClick={copy}>
+        {copied ? "Copied" : "Copy attach command"}
+      </button>
     </div>
   );
 }

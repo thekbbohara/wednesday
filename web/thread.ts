@@ -3,13 +3,15 @@ import type { ChatItem } from "./api";
 type Receipt = Extract<ChatItem, { type: "receipt" }>;
 type Message = Extract<ChatItem, { type: "owner" | "captain" }>;
 type ErrorItem = Extract<ChatItem, { type: "error" }>;
+type AgentItem = Extract<ChatItem, { type: "agent" }>;
 
 export type Row =
   | { kind: "day"; key: string; label: string }
   | { kind: "owner"; key: string; item: Message; first: boolean }
   | { kind: "captain"; key: string; item: Message; first: boolean; receipts: Receipt[] }
   | { kind: "receipts"; key: string; receipts: Receipt[] }
-  | { kind: "error"; key: string; item: ErrorItem; retryable: boolean };
+  | { kind: "error"; key: string; item: ErrorItem; retryable: boolean }
+  | { kind: "agent"; key: string; item: AgentItem };
 
 export function dayLabel(d: Date, now = new Date()): string {
   const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
@@ -74,6 +76,11 @@ export function buildRows(items: ChatItem[], now = new Date()): { rows: Row[]; t
         flush();
         rows.push({ kind: "owner", key: `m${item.id}`, item, first: lastSide !== "owner" });
         lastSide = "owner";
+        break;
+      case "agent":
+        // Receipts keep accumulating: they belong to the captain reply that follows.
+        rows.push({ kind: "agent", key: `a${item.id}`, item });
+        lastSide = null;
         break;
       case "error":
         flush();

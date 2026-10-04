@@ -11,6 +11,7 @@ import { buildTurnPrompt, handoffPrompt, newView, type SessionView } from './pro
 import type { Runner, TurnResult } from './runner.ts'
 
 const MCP_SERVER = fileURLToPath(new URL('../mcp/server.ts', import.meta.url))
+export const SILENT = /^\s*NOTHING_TO_REPORT\W*$/
 
 export interface Reply {
   text: string
@@ -35,6 +36,8 @@ export class Captain {
   private pending: LedgerEntry[] = []
   private draining = false
   onStatus?: (s: { thinking: boolean }) => void
+  /** Set by the web server, which runs the agent supervisor: live summary for the prompt, and where the agent tools reach it. */
+  agents?: { summary: () => string; url: string; token?: string }
 
   constructor(mem: Memory, cfg: Config, runner: Runner) {
     this.mem = mem
@@ -53,7 +56,12 @@ export class Captain {
       jarvis: {
         command: process.execPath,
         args: ['--disable-warning=ExperimentalWarning', MCP_SERVER],
-        env: { JARVIS_DB: this.cfg.dbPath, JARVIS_SESSION: sessionId },
+        env: {
+          JARVIS_DB: this.cfg.dbPath,
+          JARVIS_SESSION: sessionId,
+          ...(this.agents ? { JARVIS_URL: this.agents.url } : {}),
+          ...(this.agents?.token ? { JARVIS_TOKEN: this.agents.token } : {}),
+        } as Record<string, string>,
       },
     }
   }
@@ -93,11 +101,12 @@ export class Captain {
   }
 
   /**
-   * Queue owner messages for the captain. Messages that arrive while a turn
-   * runs are answered together in the next turn, like a person catching up.
+   * Queue inputs for the captain: owner messages and agent events. Inputs that
+   * arrive while a turn runs are handled together in the next turn, like a
+   * person catching up.
    */
-  enqueue(...owners: LedgerEntry[]): void {
-    this.pending.push(...owners)
+  enqueue(...inputs: LedgerEntry[]): void {
+    this.pending.push(...inputs)
     if (!this.draining) void this.drain()
   }
 
@@ -106,9 +115,9 @@ export class Captain {
     const e = this.mem.ledgerGet(failureId)
     const ids = (e?.meta?.reply_to as number[] | undefined) ?? []
     if (!e || e.kind !== 'system' || !e.meta?.error || !ids.length) throw new Error(`L${failureId} is not a failed turn`)
-    const owners = ids.map((id) => this.mem.ledgerGet(id)).filter((o): o is LedgerEntry => o?.kind === 'owner')
-    this.enqueue(...owners)
-    return owners
+    const inputs = ids.map((id) => this.mem.ledgerGet(id)).filter((o): o is LedgerEntry => o?.kind === 'owner' || o?.kind === 'agent')
+    this.enqueue(...inputs)
+    return inputs
   }
 
   get busy(): boolean {
@@ -134,38 +143,41 @@ export class Captain {
     }
   }
 
-  /** Run one captain turn answering these owner messages. */
-  respond(owners: LedgerEntry[]): Promise<Reply> {
-    const run = this.chain.then(() => withFileLock(this.lockPath, (this.cfg.turnTimeout + 120) * 1000, () => this.turn(owners)))
+  /** Run one captain turn handling these inputs (owner messages, agent events). */
+  respond(inputs: LedgerEntry[]): Promise<Reply> {
+    const run = this.chain.then(() => withFileLock(this.lockPath, (this.cfg.turnTimeout + 120) * 1000, () => this.turn(inputs)))
     this.chain = run.catch(() => undefined)
     return run
   }
 
-  private async turn(owners: LedgerEntry[]): Promise<Reply> {
+  private async turn(inputs: LedgerEntry[]): Promise<Reply> {
     let s = this.session()
-    let prompt = buildTurnPrompt(this.mem, this.cfg, owners, this.view, s.id)
+    let prompt = buildTurnPrompt(this.mem, this.cfg, inputs, this.view, s.id, this.agents?.summary() ?? null)
     let res = await this.call(s.id, !s.fresh, prompt.text)
 
     if (res.isError && res.sessionMissing) {
       this.mem.append('system', `Captain session ${s.id} is gone (${res.text}); starting fresh`, { session: s.id })
       this.mem.sessionEnd(s.id, 'missing')
       s = this.session()
-      prompt = buildTurnPrompt(this.mem, this.cfg, owners, this.view, s.id)
+      prompt = buildTurnPrompt(this.mem, this.cfg, inputs, this.view, s.id, this.agents?.summary() ?? null)
       res = await this.call(s.id, false, prompt.text)
     }
 
     if (res.isError) {
-      const e = this.failure(owners, res.text, s.id)
+      const e = this.failure(inputs, res.text, s.id)
       // A session that never completed a turn does not exist on Claude Code's side.
       if (s.fresh) this.mem.sessionEnd(s.id, 'failed first turn')
       return { text: res.text, ledgerId: e.id, sessionId: s.id, contextTokens: 0, contextWindow: null, error: true }
     }
 
     res.text = plainDash(res.text)
+    // After agent events there is often nothing worth telling the owner.
+    const silent = SILENT.test(res.text)
     const reply = this.mem.append('captain', res.text, {
       session: s.id,
       meta: {
-        reply_to: owners.map((o) => o.id),
+        ...(silent ? { silent: true } : {}),
+        reply_to: inputs.map((o) => o.id),
         context_tokens: res.contextTokens,
         context_window: res.contextWindow,
         cost_usd: res.costUsd,
@@ -175,7 +187,7 @@ export class Captain {
     this.mem.sessionTurn(s.id, res.contextTokens, res.contextWindow)
 
     const out: Reply = { text: res.text, ledgerId: reply.id, sessionId: s.id, contextTokens: res.contextTokens, contextWindow: res.contextWindow }
-    const reason = this.rotationReason(s.id, owners[0].id, res)
+    const reason = this.rotationReason(s.id, inputs[0].id, res)
     if (reason) {
       await this.rotateUnlocked(reason)
       out.rotated = reason
@@ -183,8 +195,8 @@ export class Captain {
     return out
   }
 
-  private failure(owners: LedgerEntry[], reason: string, session: string | null): LedgerEntry {
-    return this.mem.append('system', `Captain turn failed: ${reason}`, { session, meta: { error: true, reply_to: owners.map((o) => o.id) } })
+  private failure(inputs: LedgerEntry[], reason: string, session: string | null): LedgerEntry {
+    return this.mem.append('system', `Captain turn failed: ${reason}`, { session, meta: { error: true, reply_to: inputs.map((o) => o.id) } })
   }
 
   /** Why this session should end now, or null. */

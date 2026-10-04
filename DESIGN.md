@@ -10,18 +10,20 @@ characters are the same ones agent-hq uses (step 3 drives the same agents), so
 the faces, body colors and palette carry over and the owner reads them without
 learning anything new. Light and soft because it stays open all day next to
 dark terminals. agent-hq grew too many panels; Jarvis keeps exactly two
-things: the conversation and a thin strip of faces.
+things: the conversation and a hero card with the faces of the agents.
 
 ## Layout
 ```
 +--------------------------------------------------------------+
-| [J] Jarvis  thinking...                  [a][b][c] agents     |  strip, 56px
+| +------+ Jarvis                       [a] [b] [c]            |  hero card
+| | face | [captain] [opus]             3 agents . 1 working   |  (floating,
+| +------+ (o) here   Active 2m ago     . 1 needs you          |   radius 22)
 +--------------------------------------------------------------+
 |              ------------ Today ------------                  |
 |  [J] reply (markdown, [F3] citation chips)                    |
 |      saved F3 . updated T1                       receipts     |
+|  [a] scraper finished a turn  L42                agent row    |
 |                               owner message bubble  [right]   |
-|                                                               |
 +--------------------------------------------------------------+
 |  [ message Jarvis...                                ] [send]  |  composer
 +--------------------------------------------------------------+
@@ -29,6 +31,8 @@ things: the conversation and a thin strip of faces.
 - One column, max 760px wide, centered. The page never scrolls; only the
   conversation does. It opens scrolled to the newest message and loads older
   ones when scrolled to the top.
+- The header is agent-hq's hero card (the owner picked it): a floating white
+  card, not a full-bleed bar, so the page reads like agent-hq.
 - Nothing else: no sidebar, no settings, no tabs, no session or memory views.
   Session rotation is invisible; the chat is the ledger.
 
@@ -36,7 +40,7 @@ things: the conversation and a thin strip of faces.
 | Token        | Value     | Use |
 |--------------|-----------|-----|
 | --bg         | #eceff5   | page |
-| --panel      | #ffffff   | strip, captain bubbles, composer |
+| --panel      | #ffffff   | hero card, captain bubbles, composer |
 | --panel-2    | #f4f6fa   | chips, input fill, hover |
 | --line       | #e1e5ee   | hairlines |
 | --ink        | #1a2130   | primary text, owner bubble fill |
@@ -60,15 +64,32 @@ pi #b28cf5, opencode #4fd1a5, kimi #f78fb3, other #8fb3c9.
   receipts 6; between turns from the same side 4.
 - Radius: bubble 18 (the corner toward the speaker 6), chip 999, composer 22,
   button 999.
-- Shadow: strip and composer `0 1px 0 rgba(20,30,60,.04), 0 8px 24px -12px rgba(20,30,60,.12)`.
+- Shadow: hero card and composer `0 1px 0 rgba(20,30,60,.04), 0 8px 24px -12px rgba(20,30,60,.12)`.
   Bubbles are flat (captain bubble 1px --line border).
 
 ## Components
-- **Strip**: white bar, 56px, full width, content aligned to the 760 column.
-  Left: Jarvis face (36px) + name (Fredoka 17) + state text (13 --muted):
-  "here", "thinking..." (with the working face), "couldn't reply" (coral).
-  Right: agent faces (28px) with their name on hover/focus as a tooltip.
-  No agents: the right side is empty, no placeholder.
+- **Hero card** (header): white card, radius 22, the panel shadow, 16px from
+  the page top, padding 16 20, aligned to the 760 column.
+  - Left: Jarvis face 64px (radius 28% of size, as agent-hq), then name
+    (Fredoka 600 22), a row of pills (`captain` on --panel-2 mono 12, model
+    name the same), then a row with the status pill and "Active 2m ago"
+    (12 --muted, time of the last reply).
+  - Status pill: dot + label, background the state color at 14%: here (mint),
+    thinking (blue-deep), couldn't reply (coral), offline (--sleep).
+  - Right: agent faces (32px) in a row that wraps to at most two lines, then
+    a stats line under them like agent-hq's roster head: "3 agents . 1 working
+    . 1 needs you" with the counts colored (mint, amber, coral for errors).
+    No agents: the right side says "No agents yet" in --faint.
+  - Faces are buttons: hover shows the tooltip (name + state); click opens the
+    agent popover.
+- **Agent popover**: the popover component, 360 max. Head: face 28 + name
+  (600 14) + status pill. Rows (12/13): task chip + title, runtime, branch or
+  folder (mono), why it needs you (amber) when it does, then its last report
+  (max 8 lines, scroll), then "Copy attach command" (ghost button).
+- **Agent row** (in the chat): a 13px --muted line at captain indent, with the
+  agent's 20px face: "scraper finished a turn" / "scraper needs you:
+  permission prompt" (amber text) / "scraper stopped" / "scraper exited with
+  code 1" (coral), followed by its ledger chip (opens the full report).
 - **Face**: agent-hq `Face` (rounded square, body = runtime color, expression
   = state, badge for needs/error/offline).
 - **Captain message**: face 28px at the top-left, white bubble, markdown
@@ -104,7 +125,9 @@ pi #b28cf5, opencode #4fd1a5, kimi #f78fb3, other #8fb3c9.
 
 ## Responsive
 - >= 760: layout above.
-- < 760: column is full width with 12px gutters; strip 52px, agent faces
-  scroll horizontally; bubbles max 88%; composer sticks to the bottom and
-  respects the safe-area inset and the on-screen keyboard (100dvh).
+- < 760: column is full width with 12px gutters; the hero card is compact:
+  face 44, pills and "Active" on one line, margin 8 from the top; agent faces
+  (28) scroll horizontally in a row under it with the stats line beside them.
+  Bubbles max 88%; composer sticks to the bottom and respects the safe-area
+  inset and the on-screen keyboard (100dvh).
 - Verified at 375, 768, 1024, 1440.

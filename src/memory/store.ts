@@ -6,7 +6,7 @@ import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { plainDash } from '../text.ts'
 
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 export const LEDGER_KINDS = ['owner', 'captain', 'decision', 'agent', 'task', 'fact', 'now', 'system', 'rotation'] as const
 export type LedgerKind = (typeof LEDGER_KINDS)[number]
@@ -23,6 +23,22 @@ export interface Fact { id: number; kind: FactKind; subject: string; body: strin
 export interface Task { id: number; title: string; goal: string; plan: string; status: TaskStatus; result: string; created_at: string; updated_at: string }
 export interface Now { text: string; version: number; updated_at: string }
 export interface Session { id: string; started_at: string; ended_at: string | null; end_reason: string | null; turns: number; peak_tokens: number; context_window: number | null }
+
+export const AGENT_STATUSES = ['running', 'stopped', 'removed'] as const
+export type AgentStatus = (typeof AGENT_STATUSES)[number]
+export interface AgentRow {
+  id: string
+  task_id: number | null
+  runtime: string
+  cwd: string
+  /** Source repo when the agent works in a worktree Jarvis created. */
+  repo: string | null
+  branch: string | null
+  brief: string
+  status: AgentStatus
+  created_at: string
+  updated_at: string
+}
 
 export interface Hit { ref: string; kind: 'fact' | 'ledger' | 'task'; title: string; text: string; date: string; score: number }
 
@@ -111,6 +127,24 @@ CREATE TABLE sessions(
 );
 `
 
+/** Schema changes after v1, applied in order by `node src/migrate.ts` (never implicitly). */
+export const MIGRATIONS: Record<number, string> = {
+  2: `
+CREATE TABLE agents(
+  id TEXT PRIMARY KEY,
+  task_id INTEGER REFERENCES tasks(id),
+  runtime TEXT NOT NULL,
+  cwd TEXT NOT NULL,
+  repo TEXT,
+  branch TEXT,
+  brief TEXT NOT NULL,
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+`,
+}
+
 const STOPWORDS = new Set(
   ('a an and are as at be but by can could did do does for from had has have how i if in into is it its me my no not of on or our ' +
     'so that the their them then there these they this to us was we were what when where which who why will with would you your ' +
@@ -139,9 +173,11 @@ type Row = Record<string, unknown>
 export class Memory {
   readonly db: DatabaseSync
   readonly nowBudgetChars: number
+  readonly path: string
   private clock: () => Date
 
   constructor(path: string, opts: StoreOptions = {}) {
+    this.path = path
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true })
     this.db = new DatabaseSync(path)
     this.db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;')
@@ -158,6 +194,7 @@ export class Memory {
       // Fresh file created by Jarvis itself: lay down the schema.
       this.db.exec('BEGIN')
       this.db.exec(SCHEMA)
+      for (const v of Object.keys(MIGRATIONS).map(Number).sort((a, b) => a - b)) this.db.exec(MIGRATIONS[v])
       this.db.prepare('INSERT INTO meta(key, value) VALUES (?, ?)').run('schema_version', String(SCHEMA_VERSION))
       this.db.exec('COMMIT')
       return
@@ -166,7 +203,11 @@ export class Memory {
     const v = Number(row?.value ?? 0)
     if (v !== SCHEMA_VERSION) {
       // Never migrate the owner's data implicitly.
-      throw new Error(`memory schema v${v}, code expects v${SCHEMA_VERSION}; run the migration by hand (see README)`)
+      throw new Error(
+        v < SCHEMA_VERSION
+          ? `memory schema v${v}, code expects v${SCHEMA_VERSION}. Back up and migrate it by hand: node src/migrate.ts ${this.path}`
+          : `memory schema v${v} is newer than this code (v${SCHEMA_VERSION}); update Jarvis`,
+      )
     }
   }
 
@@ -350,6 +391,41 @@ export class Memory {
 
   sessions(): Session[] {
     return this.db.prepare('SELECT * FROM sessions ORDER BY started_at').all() as unknown as Session[]
+  }
+
+  // ---- agents -------------------------------------------------------------
+
+  agentCreate(a: Omit<AgentRow, 'status' | 'created_at' | 'updated_at'>): AgentRow {
+    const ts = this.ts()
+    this.db
+      .prepare('INSERT INTO agents(id, task_id, runtime, cwd, repo, branch, brief, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(a.id, a.task_id, a.runtime, a.cwd, a.repo, a.branch, a.brief, 'running', ts, ts)
+    return this.agentGet(a.id)!
+  }
+
+  agentGet(id: string): AgentRow | null {
+    return (this.db.prepare('SELECT * FROM agents WHERE id = ?').get(id) as AgentRow | undefined) ?? null
+  }
+
+  /** Agents not removed, oldest first. */
+  agentList(includeRemoved = false): AgentRow[] {
+    const where = includeRemoved ? '' : "WHERE status != 'removed'"
+    return this.db.prepare(`SELECT * FROM agents ${where} ORDER BY created_at, id`).all() as unknown as AgentRow[]
+  }
+
+  agentSetStatus(id: string, status: AgentStatus): void {
+    const u = this.db.prepare('UPDATE agents SET status = ?, updated_at = ? WHERE id = ?').run(status, this.ts(), id)
+    if (u.changes === 0) throw new Error(`no such agent ${id}`)
+  }
+
+  /** Latest ledger entry about an agent, optionally of one event kind (report, needs, ...). */
+  agentLastEvent(id: string, event?: string): LedgerEntry | null {
+    const r = this.db
+      .prepare(
+        `SELECT * FROM ledger WHERE kind = 'agent' AND json_extract(meta, '$.agent') = ? ${event ? "AND json_extract(meta, '$.event') = ?" : ''} ORDER BY id DESC LIMIT 1`,
+      )
+      .get(...(event ? [id, event] : [id])) as Row | undefined
+    return r ? toLedger(r) : null
   }
 
   // ---- search -------------------------------------------------------------

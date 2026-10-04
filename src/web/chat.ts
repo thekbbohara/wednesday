@@ -7,15 +7,25 @@ export type ChatItem =
   | { type: 'owner' | 'captain'; id: number; ts: string; text: string }
   | { type: 'receipt'; id: number; ts: string; verb: string; ref: string }
   | { type: 'error'; id: number; ts: string; text: string }
+  | { type: 'agent'; id: number; ts: string; agent: string; event: string; text: string }
 
-const SHOWN = ['owner', 'captain', 'fact', 'task', 'decision', 'now', 'system'] as const
+const SHOWN = ['owner', 'captain', 'fact', 'task', 'decision', 'now', 'system', 'agent'] as const
+/** Agent events the owner sees; the captain's own messages and answers to agents stay in the ledger. */
+const SHOWN_AGENT_EVENTS = new Set(['spawn', 'report', 'needs', 'exit', 'error', 'stop'])
 
 export function toChatItem(e: LedgerEntry): ChatItem | null {
   const base = { id: e.id, ts: e.ts }
   switch (e.kind) {
     case 'owner':
-    case 'captain':
       return { ...base, type: e.kind, text: e.text }
+    case 'captain':
+      return e.meta?.silent ? null : { ...base, type: e.kind, text: e.text }
+    case 'agent': {
+      const event = String(e.meta?.event ?? '')
+      if (!SHOWN_AGENT_EVENTS.has(event)) return null
+      const agent = String(e.meta?.agent ?? '')
+      return { ...base, type: 'agent', agent, event, text: agentLine(event, agent, e) }
+    }
     case 'fact': {
       const id = e.meta?.fact
       if (typeof id !== 'number') return null
@@ -25,7 +35,9 @@ export function toChatItem(e: LedgerEntry): ChatItem | null {
       const id = e.meta?.task
       if (typeof id !== 'number') return null
       const to = e.meta?.status
-      const verb = / created /.test(e.text) ? 'created' : to !== e.meta?.from && (to === 'done' || to === 'cancelled') ? `${to === 'done' ? 'finished' : 'cancelled'}` : 'updated'
+      // Creation entries carry no `from` status; updates do.
+      const from = e.meta?.from
+      const verb = from === undefined ? 'created' : to !== from && to === 'done' ? 'finished' : to !== from && to === 'cancelled' ? 'cancelled' : 'updated'
       return { ...base, type: 'receipt', verb, ref: `T${id}` }
     }
     case 'decision':
@@ -36,6 +48,22 @@ export function toChatItem(e: LedgerEntry): ChatItem | null {
       return e.meta?.error ? { ...base, type: 'error', text: e.text.replace(/^Captain turn failed: /, '') } : null
     default:
       return null
+  }
+}
+
+/** The one-line summary the chat shows; the full text is behind the ledger chip. */
+function agentLine(event: string, agent: string, e: LedgerEntry): string {
+  const first = e.text.split('\n')[0].replace(new RegExp(`^${agent} `), '')
+  switch (event) {
+    case 'report':
+      return 'finished a turn'
+    case 'needs':
+      return `needs an answer: ${String(e.meta?.reason ?? 'prompt')}`
+    case 'spawn':
+      // The full path is in the ledger entry; the chat line names the folder only.
+      return first.replace(/ in (\/\S+)$/, (_, p: string) => ` in ${p.split('/').filter(Boolean).pop()}`)
+    default:
+      return first
   }
 }
 
@@ -87,6 +115,11 @@ export function describeRef(mem: Memory, ref: string): { ref: string; title: str
       if (kind === 'decision') {
         const m = /^Decision: ([\s\S]*?)\. Reason: ([\s\S]*)$/.exec(String(r.text))
         if (m) return { ref: got.ref, title: 'Decision', body: `${m[1]}.\n\nWhy: ${m[2]}`, date: String(r.ts) }
+      }
+      if (kind === 'agent') {
+        const meta = (r.meta ?? {}) as Record<string, unknown>
+        const body = String(r.text).replace(/^\S+ reported:\n/, '')
+        return { ref: got.ref, title: `${meta.agent ?? 'Agent'}, ${String(meta.event ?? 'event')}`, body, date: String(r.ts) }
       }
       const who = kind === 'owner' ? 'You said' : kind === 'captain' ? 'Jarvis said' : kind[0].toUpperCase() + kind.slice(1)
       return { ref: got.ref, title: who, body: String(r.text), date: String(r.ts) }

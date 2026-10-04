@@ -4,9 +4,9 @@ One chat, forever. The owner talks to a single captain; the captain keeps its
 memory outside the LLM session, so the session can be thrown away and rebuilt
 at any time without losing anything. See `BRIEF.md` for the full intent.
 
-Status: **steps 1-2 done** - memory, captain, session rotation, terminal
-chat, web chat. Not yet: spawning agents (step 3), nightly sleep (step 4),
-long-run eval (step 5).
+Status: **steps 1-3 done** - memory, captain, session rotation, terminal
+chat, web chat, worker agents. Not yet: nightly sleep (step 4), long-run eval
+(step 5).
 
 ## Run it
 
@@ -28,14 +28,17 @@ Development (UI with hot reload on :5788, API on :4788):
 
 ```sh
 pnpm dev
-# no tokens spent: a scripted captain, plus fake agents in the strip
-JARVIS_DATA_DIR=/tmp/jarvis-demo DEMO_AGENTS=1 node test/demo-server.ts
+# no tokens spent: a scripted captain and fake agents
+# ("spawn <name>" starts one, "ask <name>" one that shows a menu)
+JARVIS_DATA_DIR=/tmp/jarvis-demo node test/demo-server.ts
 ```
 
 ### Web chat
 
-One conversation and a strip of faces (see `DESIGN.md`). Jarvis's face shows
-when it is thinking or couldn't reply; agent faces arrive in step 3.
+One conversation under agent-hq's hero card (see `DESIGN.md`): Jarvis's face,
+model and state on the left, the agents' faces and counts on the right.
+Click an agent's face for its task, branch, why it needs you, its last report
+and the command to attach to its terminal.
 
 - Messages sent while Jarvis is thinking are answered together in its next
   turn. Replies land in order of time, like any messenger.
@@ -44,6 +47,8 @@ when it is thinking or couldn't reply; agent faces arrive in step 3.
 - Under each reply, a receipt line shows what Jarvis wrote to memory during
   that turn ("saved F3 . created T1 . updated Now").
 - A failed turn shows the reason and a **Retry** button.
+- Agent events show as one-line rows (started, finished a turn, needs an
+  answer, stopped, exited); the chip opens the full report or screen.
 - Scroll up to load older messages. Session rotation never shows.
 
 Terminal chat commands: `/now`, `/tasks`, `/facts`, `/search <words>`,
@@ -56,7 +61,16 @@ ledger id and how full the captain's context is.
 cp .env.example .env            # set UID/GID to `id -u` / `id -g`
 docker compose up -d --build    # http://127.0.0.1:4788
 docker compose exec jarvis node src/cli.ts   # terminal chat in the container
+docker compose exec jarvis tmux -L jarvis attach -t jarvis_<name>   # watch an agent
 ```
+
+Agents run inside the container. Set `PROJECTS_DIR` to the folder holding the
+repos they work on: it is mounted at the same path, so paths you mention in
+the chat work unchanged. Your `~/.gitconfig` is mounted for their commits and
+`~/.codex` for Codex. Pick the CLIs baked in with
+`--build-arg AGENT_CLIS="@anthropic-ai/claude-code @openai/codex"`. Worktrees
+live in the data volume, so on the host `git worktree list` shows them as
+prunable; that is expected.
 
 Memory lives in the `jarvis-data` volume. To keep it in a host folder,
 `mkdir -p data` first (Docker would create it as root) and set
@@ -83,7 +97,40 @@ Memory lives in the `jarvis-data` volume. To keep it in a host folder,
 | `JARVIS_TURN_TIMEOUT`     | `600`              | Seconds before a turn is abandoned. |
 | `JARVIS_CLAUDE_BIN`       | `claude`           | Claude Code binary. |
 | `HOST` / `PORT`           | `127.0.0.1` / `4788` | Web server address. |
+| `JARVIS_TMUX_SOCKET`      | `jarvis`           | Private tmux socket for the agents. |
 | `JARVIS_TOKEN`            | none               | Shared secret for the web chat (cookie via `/?token=`, or `Authorization: Bearer`). |
+
+## Agents
+
+The captain delegates work to worker agents (Claude Code by default, also
+Codex, pi, Kimi, opencode). The supervisor runs inside the web server, so
+agents need `pnpm start` (the terminal chat alone cannot run them).
+
+- **Isolation**: for code, each agent gets a fresh git worktree of the repo in
+  `<data>/worktrees/<name>`, on its own branch (`jarvis/<name>`, or the Jira
+  key for ticket work). Removing an agent deletes the worktree only when it
+  has no uncommitted changes; the branch always stays.
+- **Running**: agents live in tmux on the private `jarvis` socket
+  (`JARVIS_TMUX_SOCKET`), so they keep running across Jarvis restarts. Attach
+  with `tmux -L jarvis attach -t jarvis_<name>`. The brief is typed in once
+  the agent is idle at its prompt. Claude Code workers run with
+  `--permission-mode auto` and never add a co-author line to commits.
+- **Zero-token supervision**: the supervisor reads screens every 1.5s with no
+  LLM. The captain is woken only for an agent event: `report` (turn ended,
+  from the Claude Stop hook or Codex notify; for other runtimes, when the
+  screen goes quiet), `needs` (a prompt has been on screen for 2s), `exit` or
+  `error`. Events arriving while the captain is busy are handled together.
+- **Prompts**: the folder-trust prompt for a worktree Jarvis created is
+  accepted automatically. Every other prompt goes to the captain, which only
+  answers what is clearly safe and inside the job, and asks you otherwise.
+- **Quiet**: when an event needs nothing from you, the captain replies
+  `NOTHING_TO_REPORT` and the chat shows only the agent row.
+
+Runtimes are configured like agent-hq's, in `<data>/runtimes.json`:
+
+```json
+[{ "id": "claude-code", "command": "claude --model sonnet --permission-mode auto" }]
+```
 
 ## How it works
 
@@ -110,11 +157,15 @@ native deps), FTS5 with porter stemming.
   status, which is how "a task closed" triggers rotation.
 - `now` - one versioned note with a hard char budget.
 - `sessions` - each captain session, its turns, peak tokens, why it ended.
+- `agents` - each worker: task, runtime, folder, repo and branch, status.
+  Live state (working, needs, ...) is read from its screen, never stored.
 
 **Captain tools** (`src/mcp/server.ts`, stdio MCP): `memory_search`,
 `memory_get`, `memory_write`, `fact_mark_stale`, `now_update`, `now_get`,
-`task_create`, `task_update`, `task_list`, `task_get`, `log_decision`. Every
-write is stamped with the captain session id.
+`task_create`, `task_update`, `task_list`, `task_get`, `log_decision`, and
+`agent_spawn`, `agent_list`, `agent_read`, `agent_send`, `agent_answer`,
+`agent_stop` (these call the web server). Every memory write is stamped with
+the captain session id. Each prompt also carries a live `<agents>` block.
 
 **Truthfulness**: the prompt requires citing `[L..]`/`[F..]`/`[T..]` for any
 claim about the past and saying "I don't have that" when search finds nothing.
@@ -168,9 +219,14 @@ pnpm typecheck
 ## Schema changes
 
 The schema is created only on a brand-new file. On a version mismatch Jarvis
-refuses to start instead of migrating; migrations are prepared as SQL and run
-by the owner by hand. Jarvis also refuses to open a SQLite file that is not
-its own.
+refuses to start instead of migrating, and prints the command to run by hand:
+
+```sh
+node src/migrate.ts ~/.jarvis/memory.db     # backs up to memory.db.bak-v<old> first
+```
+
+v2 (step 3) added the `agents` table. Jarvis also refuses to open a SQLite
+file that is not its own.
 
 ## Layout
 
@@ -185,7 +241,14 @@ src/captain/captain.ts   turn loop, batching, rotation
 src/captain/lock.ts      cross-process turn lock
 src/captain/prompt.ts    what the captain sees each turn
 src/captain/runner.ts    one headless claude call
+src/agents/supervisor.ts worker agents: spawn, watch, brief, events
+src/agents/worktree.ts   git worktree per agent
+src/agents/activity.ts   screen -> state (from agent-hq, with its fixtures)
+src/agents/tmux.ts       tmux driver (from agent-hq)
+src/agents/hooks.ts      turn hook script and CLI args
+src/agents/runtimes.ts   agent CLIs and runtimes.json
+src/migrate.ts           schema upgrades, run by hand
 prompts/captain.md       captain system prompt
 web/                     React UI (DESIGN.md); Face.tsx is shared with agent-hq
-test/demo-server.ts      scripted server for UI work
+test/demo-server.ts      scripted captain + fake agents for UI work
 ```

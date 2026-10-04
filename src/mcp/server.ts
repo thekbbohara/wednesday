@@ -6,7 +6,12 @@ import { z } from 'zod'
 import { fileURLToPath } from 'node:url'
 import { FACT_KINDS, Memory, TASK_STATUSES, type Hit } from '../memory/store.ts'
 
-export function buildServer(mem: Memory, session: string | null): McpServer {
+export interface AgentApi {
+  url: string
+  token?: string
+}
+
+export function buildServer(mem: Memory, session: string | null, agentApi: AgentApi | null = null): McpServer {
   const server = new McpServer({ name: 'jarvis', version: '0.1.0' })
 
   const ok = (data: unknown) => ({ content: [{ type: 'text' as const, text: typeof data === 'string' ? data : JSON.stringify(data, null, 2) }] })
@@ -164,7 +169,94 @@ export function buildServer(mem: Memory, session: string | null): McpServer {
     guard(({ decision, reason }) => `Logged L${mem.append('decision', `Decision: ${decision}. Reason: ${reason}`, { session }).id}.`),
   )
 
+  registerAgentTools(server, agentApi)
   return server
+}
+
+/** Agent tools talk to the web server, which runs the supervisor. */
+function registerAgentTools(server: McpServer, api: AgentApi | null) {
+  const call = async (method: 'GET' | 'POST', path: string, body?: unknown) => {
+    if (!api) return { isError: true, content: [{ type: 'text' as const, text: 'Agents are unavailable: the Jarvis web server is not running (start it with `pnpm start`).' }] }
+    try {
+      const res = await fetch(api.url + path, {
+        method,
+        headers: { 'content-type': 'application/json', ...(api.token ? { authorization: `Bearer ${api.token}` } : {}) },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(60_000),
+      })
+      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+      if (!res.ok) return { isError: true, content: [{ type: 'text' as const, text: String(data.error ?? `${res.status} ${res.statusText}`) }] }
+      return { content: [{ type: 'text' as const, text: typeof data.text === 'string' ? data.text : JSON.stringify(data, null, 2) }] }
+    } catch (e) {
+      return { isError: true, content: [{ type: 'text' as const, text: `Could not reach the Jarvis server: ${(e as Error).message}` }] }
+    }
+  }
+
+  server.registerTool(
+    'agent_spawn',
+    {
+      description:
+        'Start a worker agent on a job. For code work pass repo: the agent gets a fresh git worktree on its own branch (jarvis/<name> unless you pass branch, e.g. a Jira key). ' +
+        'For other work pass cwd. The brief is its whole job: goal, constraints, how to verify, what to report. Link it to a task. ' +
+        'You are woken when it ends a turn, needs an answer, or dies; do not poll.',
+      inputSchema: {
+        name: z.string().describe('Short lowercase name, e.g. "scraper". Never reused.'),
+        runtime: z.string().default('claude-code').describe('claude-code (default), codex, pi, kimi or opencode'),
+        brief: z.string().min(1),
+        task_id: z.number().int().optional(),
+        repo: z.string().optional(),
+        cwd: z.string().optional(),
+        branch: z.string().optional(),
+        base: z.string().optional().describe('Commit or branch the worktree starts from (default: the repo HEAD).'),
+      },
+    },
+    ({ name, ...rest }) => call('POST', '/api/agents', { id: name, ...rest }),
+  )
+
+  server.registerTool(
+    'agent_list',
+    { description: 'All agents with their live state (working, idle, needs, error, offline), task, branch and folder.', inputSchema: {} },
+    () => call('GET', '/api/agents?format=text'),
+  )
+
+  server.registerTool(
+    'agent_read',
+    {
+      description: "An agent's live screen (last lines of its terminal) and state. Use when a report is unclear or to check progress without waiting.",
+      inputSchema: { name: z.string(), lines: z.number().int().min(10).max(400).default(60) },
+    },
+    ({ name, lines }) => call('GET', `/api/agents/${encodeURIComponent(name)}/screen?lines=${lines}`),
+  )
+
+  server.registerTool(
+    'agent_send',
+    {
+      description: 'Type a message into an agent as its next instruction (follow-up, correction, answer to a question it asked in its report).',
+      inputSchema: { name: z.string(), text: z.string().min(1) },
+    },
+    ({ name, text }) => call('POST', `/api/agents/${encodeURIComponent(name)}/send`, { text }),
+  )
+
+  server.registerTool(
+    'agent_answer',
+    {
+      description:
+        "Pick an option in the menu on an agent's screen (permission or choice prompt), by its exact label. " +
+        'Only answer what the owner already allowed or what is clearly safe and inside the job; otherwise ask the owner first.',
+      inputSchema: { name: z.string(), option: z.string() },
+    },
+    ({ name, option }) => call('POST', `/api/agents/${encodeURIComponent(name)}/answer`, { label: option }),
+  )
+
+  server.registerTool(
+    'agent_stop',
+    {
+      description:
+        'Stop an agent. remove=true also deletes its worktree (refused if it has uncommitted changes; the branch and commits stay) and takes it off the strip.',
+      inputSchema: { name: z.string(), remove: z.boolean().default(false) },
+    },
+    ({ name, remove }) => call('POST', `/api/agents/${encodeURIComponent(name)}/stop`, { remove }),
+  )
 }
 
 function fmtHit(h: Hit): string {
@@ -178,6 +270,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(2)
   }
   const mem = new Memory(db)
-  const server = buildServer(mem, process.env.JARVIS_SESSION || null)
+  const url = process.env.JARVIS_URL
+  const server = buildServer(mem, process.env.JARVIS_SESSION || null, url ? { url, token: process.env.JARVIS_TOKEN || undefined } : null)
   await server.connect(new StdioServerTransport())
 }

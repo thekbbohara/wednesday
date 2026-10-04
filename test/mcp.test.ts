@@ -35,7 +35,25 @@ describe('jarvis MCP server', () => {
   it('lists the captain tools', async () => {
     const names = (await client.listTools()).tools.map((t) => t.name).sort()
     expect(names).toEqual(
-      ['fact_mark_stale', 'log_decision', 'memory_get', 'memory_search', 'memory_write', 'now_get', 'now_update', 'task_create', 'task_get', 'task_list', 'task_update'].sort(),
+      [
+        'agent_answer',
+        'agent_list',
+        'agent_read',
+        'agent_send',
+        'agent_spawn',
+        'agent_stop',
+        'fact_mark_stale',
+        'log_decision',
+        'memory_get',
+        'memory_search',
+        'memory_write',
+        'now_get',
+        'now_update',
+        'task_create',
+        'task_get',
+        'task_list',
+        'task_update',
+      ].sort(),
     )
   })
 
@@ -53,6 +71,12 @@ describe('jarvis MCP server', () => {
     const mem = new Memory(db)
     expect(mem.ledgerTail(10).filter((e) => e.kind !== 'system').every((e) => e.session === 'sess-1')).toBe(true)
     mem.close()
+  })
+
+  it('says plainly that agents need the web server when it is not running', async () => {
+    const r = await call('agent_list')
+    expect(r.isError).toBe(true)
+    expect(text(r)).toMatch(/web server is not running/)
   })
 
   it('reports errors as tool errors, not crashes', async () => {

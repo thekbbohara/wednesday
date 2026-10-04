@@ -35,6 +35,17 @@ describe("buildRows", () => {
   });
 });
 
+describe("agent rows", () => {
+  it("sit between messages, break captain groups, and leave receipts for the next reply", () => {
+    const agent: ChatItem = { type: "agent", id: 3, ts: at(3), agent: "scraper", event: "report", text: "finished a turn" };
+    const { rows } = buildRows([captain(1), receipt(2, "T1"), agent, captain(4)], now);
+    expect(rows.map((r) => r.kind)).toEqual(["day", "captain", "agent", "captain"]);
+    const last = rows[3];
+    expect(last.kind === "captain" && last.first).toBe(true);
+    expect(last.kind === "captain" && last.receipts.map((r) => r.ref)).toEqual(["T1"]);
+  });
+});
+
 describe("dayLabel", () => {
   it("names recent days and dates older ones", () => {
     expect(dayLabel(new Date("2026-10-03T08:00:00"), now)).toBe("Today");
