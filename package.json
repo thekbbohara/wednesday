@@ -1,0 +1,28 @@
+{
+  "name": "jarvis",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "bin": {
+    "jarvis": "src/cli.ts"
+  },
+  "scripts": {
+    "chat": "node --disable-warning=ExperimentalWarning src/cli.ts",
+    "mcp": "node --disable-warning=ExperimentalWarning src/mcp/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "NODE_OPTIONS=--disable-warning=ExperimentalWarning vitest run",
+    "test:live": "JARVIS_LIVE=1 NODE_OPTIONS=--disable-warning=ExperimentalWarning vitest run test/live.test.ts --silent=false"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}

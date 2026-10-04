@@ -1,0 +1,183 @@
+// MCP server exposing Jarvis memory to the captain (stdio).
+// Env: JARVIS_DB (memory file), JARVIS_SESSION (captain session id, for the ledger).
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import { z } from 'zod'
+import { fileURLToPath } from 'node:url'
+import { FACT_KINDS, Memory, TASK_STATUSES, type Hit } from '../memory/store.ts'
+
+export function buildServer(mem: Memory, session: string | null): McpServer {
+  const server = new McpServer({ name: 'jarvis', version: '0.1.0' })
+
+  const ok = (data: unknown) => ({ content: [{ type: 'text' as const, text: typeof data === 'string' ? data : JSON.stringify(data, null, 2) }] })
+  const fail = (e: unknown) => ({ isError: true, content: [{ type: 'text' as const, text: e instanceof Error ? e.message : String(e) }] })
+  const guard =
+    <A,>(fn: (args: A) => unknown) =>
+    async (args: A) => {
+      try {
+        return ok(fn(args))
+      } catch (e) {
+        return fail(e)
+      }
+    }
+
+  server.registerTool(
+    'memory_search',
+    {
+      description:
+        'Keyword search over memory: facts (F ids), tasks (T ids) and the ledger of everything said and done (L ids). ' +
+        'Use before answering any question about the past. Results carry ids to cite. Empty result means you do not have it.',
+      inputSchema: {
+        query: z.string().min(1).describe('Keywords. Use distinctive words; synonyms are not matched, so try variants if nothing comes back.'),
+        scope: z.enum(['all', 'facts', 'tasks', 'ledger']).default('all'),
+        limit: z.number().int().min(1).max(30).default(8),
+        include_stale: z.boolean().default(false).describe('Include facts that were superseded or marked stale.'),
+      },
+    },
+    guard(({ query, scope, limit, include_stale }) => {
+      const hits = mem.search(query, { scope, limit, includeStale: include_stale })
+      return hits.length ? hits.map(fmtHit).join('\n') : `No matches for "${query}" in ${scope}.`
+    }),
+  )
+
+  server.registerTool(
+    'memory_get',
+    {
+      description: 'Fetch full records by id: F12 (fact), T3 (task), L120 (ledger entry).',
+      inputSchema: { ids: z.array(z.string()).min(1).max(20) },
+    },
+    guard(({ ids }) => ids.map((id) => mem.get(id) ?? { ref: id, error: 'not found' })),
+  )
+
+  server.registerTool(
+    'memory_write',
+    {
+      description:
+        'Save one atomic, durable fact (about the owner, a person, a project, a preference, or a decision with its reason). ' +
+        'One fact per call. If it replaces older facts, pass their ids in supersedes; they are marked stale.',
+      inputSchema: {
+        kind: z.enum(FACT_KINDS),
+        subject: z.string().min(1).max(120).describe('Short handle, e.g. "owner timezone" or "jarvis memory backend".'),
+        body: z.string().min(1).max(1500),
+        source: z.string().min(1).describe('Where it came from: a ledger id like L42, or "owner".'),
+        supersedes: z.array(z.number().int()).optional(),
+      },
+    },
+    guard((a) => {
+      const f = mem.factWrite(a, session)
+      return `Saved F${f.id}.`
+    }),
+  )
+
+  server.registerTool(
+    'fact_mark_stale',
+    {
+      description: 'Mark a fact as no longer true without replacing it.',
+      inputSchema: { id: z.number().int(), reason: z.string().min(1) },
+    },
+    guard(({ id, reason }) => {
+      mem.factMarkStale(id, reason, session)
+      return `F${id} marked stale.`
+    }),
+  )
+
+  server.registerTool(
+    'now_update',
+    {
+      description:
+        'Replace the Now note: current goals, open tasks (by T id), running agents, what waits on the owner, and the "why" behind ' +
+        `current work. Loaded at the start of every session, so a fresh session must be able to continue from it alone. Hard limit ${mem.nowBudgetChars} chars.`,
+      inputSchema: { text: z.string().min(1) },
+    },
+    guard(({ text }) => {
+      const n = mem.nowUpdate(text, session)
+      return `Now updated (v${n.version}, ${n.text.length}/${mem.nowBudgetChars} chars).`
+    }),
+  )
+
+  server.registerTool(
+    'now_get',
+    { description: 'Read the current Now note.', inputSchema: {} },
+    guard(() => {
+      const n = mem.nowGet()
+      return n.version ? `Now v${n.version} (${n.updated_at}):\n${n.text}` : 'Now is empty.'
+    }),
+  )
+
+  server.registerTool(
+    'task_create',
+    {
+      description: 'Create a task record for a job: title, goal (with the why), optional plan.',
+      inputSchema: {
+        title: z.string().min(1).max(160),
+        goal: z.string().min(1),
+        plan: z.string().optional(),
+        status: z.enum(TASK_STATUSES).default('open'),
+      },
+    },
+    guard((a) => `Created T${mem.taskCreate(a, session).id}.`),
+  )
+
+  server.registerTool(
+    'task_update',
+    {
+      description: 'Update a task. Set status done (with result) when finished, waiting_owner when blocked on the owner.',
+      inputSchema: {
+        id: z.number().int(),
+        title: z.string().optional(),
+        goal: z.string().optional(),
+        plan: z.string().optional(),
+        status: z.enum(TASK_STATUSES).optional(),
+        result: z.string().optional(),
+      },
+    },
+    guard(({ id, ...patch }) => {
+      const t = mem.taskUpdate(id, patch, session)
+      return `T${t.id} is ${t.status}.`
+    }),
+  )
+
+  server.registerTool(
+    'task_list',
+    {
+      description: 'List tasks, newest first. Default: open ones only.',
+      inputSchema: { open_only: z.boolean().default(true), status: z.enum(TASK_STATUSES).optional(), limit: z.number().int().min(1).max(100).default(30) },
+    },
+    guard(({ open_only, status, limit }) => {
+      const ts = mem.taskList({ open: open_only, status, limit })
+      return ts.length ? ts.map((t) => `T${t.id} [${t.status}] ${t.title} - ${t.goal}`).join('\n') : 'No tasks.'
+    }),
+  )
+
+  server.registerTool(
+    'task_get',
+    { description: 'Full task record.', inputSchema: { id: z.number().int() } },
+    guard(({ id }) => mem.taskGet(id) ?? `No task T${id}.`),
+  )
+
+  server.registerTool(
+    'log_decision',
+    {
+      description: 'Record a decision and its reason in the ledger, so it can be cited later. Use for every non-trivial decision.',
+      inputSchema: { decision: z.string().min(1), reason: z.string().min(1) },
+    },
+    guard(({ decision, reason }) => `Logged L${mem.append('decision', `Decision: ${decision}. Reason: ${reason}`, { session }).id}.`),
+  )
+
+  return server
+}
+
+function fmtHit(h: Hit): string {
+  return `${h.ref} (${h.date.slice(0, 10)}) ${h.title}: ${h.text}`
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const db = process.env.JARVIS_DB
+  if (!db) {
+    console.error('JARVIS_DB is required')
+    process.exit(2)
+  }
+  const mem = new Memory(db)
+  const server = buildServer(mem, process.env.JARVIS_SESSION || null)
+  await server.connect(new StdioServerTransport())
+}

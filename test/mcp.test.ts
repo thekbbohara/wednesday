@@ -1,0 +1,66 @@
+// The MCP server as Claude Code runs it: a child process over stdio.
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { Memory } from '../src/memory/store.ts'
+
+const SERVER = fileURLToPath(new URL('../src/mcp/server.ts', import.meta.url))
+const db = join(mkdtempSync(join(tmpdir(), 'jarvis-mcp-')), 'memory.db')
+let client: Client
+
+const text = (r: unknown) => ((r as { content: { text: string }[] }).content[0]?.text ?? '')
+const call = async (name: string, args: Record<string, unknown> = {}) => client.callTool({ name, arguments: args })
+
+beforeAll(async () => {
+  new Memory(db).close()
+  client = new Client({ name: 'test', version: '0' })
+  await client.connect(
+    new StdioClientTransport({
+      command: process.execPath,
+      args: ['--disable-warning=ExperimentalWarning', SERVER],
+      env: { ...process.env, JARVIS_DB: db, JARVIS_SESSION: 'sess-1' } as Record<string, string>,
+    }),
+  )
+})
+
+afterAll(async () => {
+  await client?.close()
+})
+
+describe('jarvis MCP server', () => {
+  it('lists the captain tools', async () => {
+    const names = (await client.listTools()).tools.map((t) => t.name).sort()
+    expect(names).toEqual(
+      ['fact_mark_stale', 'log_decision', 'memory_get', 'memory_search', 'memory_write', 'now_get', 'now_update', 'task_create', 'task_get', 'task_list', 'task_update'].sort(),
+    )
+  })
+
+  it('writes and finds facts, tasks, decisions; stamps the session', async () => {
+    expect(text(await call('memory_write', { kind: 'owner', subject: 'owner city', body: 'Kathmandu', source: 'owner' }))).toBe('Saved F1.')
+    expect(text(await call('task_create', { title: 'Build memory', goal: 'captain survives rotation' }))).toBe('Created T1.')
+    expect(text(await call('log_decision', { decision: 'Use SQLite FTS5', reason: 'one file, no servers' }))).toMatch(/^Logged L\d+\.$/)
+    expect(text(await call('task_update', { id: 1, status: 'done', result: 'shipped' }))).toBe('T1 is done.')
+
+    const found = text(await call('memory_search', { query: 'sqlite' }))
+    expect(found).toMatch(/L\d+ .*decision: Decision: Use SQLite FTS5/)
+    expect(text(await call('memory_search', { query: 'zebra' }))).toMatch(/No matches/)
+    expect(text(await call('memory_get', { ids: ['F1', 'T9'] }))).toMatch(/Kathmandu[\s\S]*not found/)
+
+    const mem = new Memory(db)
+    expect(mem.ledgerTail(10).filter((e) => e.kind !== 'system').every((e) => e.session === 'sess-1')).toBe(true)
+    mem.close()
+  })
+
+  it('reports errors as tool errors, not crashes', async () => {
+    const r = await call('now_update', { text: 'x'.repeat(9000) })
+    expect(r.isError).toBe(true)
+    expect(text(r)).toMatch(/budget/)
+    const ok = await call('now_update', { text: 'Goal: ship step 1' })
+    expect(text(ok)).toMatch(/v1/)
+    expect(text(await call('now_get'))).toMatch(/ship step 1/)
+  })
+})
