@@ -144,3 +144,46 @@ describe('plain dash rule', () => {
     expect(m.append('owner', 'hi — there').text).toBe('hi - there')
   })
 })
+
+describe('outdated history', () => {
+  // The chain the long-run eval hit: a plant, the captain's reply, a later change.
+  function chain() {
+    const m = mk()
+    const said = m.append('owner', 'StockMate will be hosted on a Hetzner VPS.')
+    const reply = m.append('captain', 'Got it. Hetzner VPS for StockMate.', { meta: { reply_to: [said.id] } })
+    const decision = m.append('decision', 'Decision: Host StockMate on Hetzner. Reason: Postgres on the box')
+    const old = m.factWrite({ kind: 'decision', subject: 'stockmate hosting', body: 'Hetzner VPS', source: `L${said.id}` })
+    const change = m.append('owner', 'We are moving StockMate from Hetzner to DigitalOcean.')
+    const now = m.factWrite({ kind: 'decision', subject: 'stockmate hosting', body: 'DigitalOcean', source: `L${change.id}`, supersedes: [old.id] })
+    const wrong = m.append('captain', `StockMate runs on Hetzner [L${reply.id}].`, { meta: { reply_to: [] } })
+    return { m, said, reply, decision, old, now, change, wrong }
+  }
+
+  it('marks entries from the turn of a replaced fact, and entries that cite them', () => {
+    const { m, said, reply, decision, wrong, change, old, now } = chain()
+    const note = `outdated: F${old.id} was replaced by F${now.id}: stockmate hosting: DigitalOcean`
+    expect(m.outdated(said)).toBe(note)
+    expect(m.outdated(reply)).toBe(note)
+    expect(m.outdated(decision)).toBe(note)
+    expect(m.outdated(wrong)).toBe(note)
+    expect(m.outdated(change)).toBeNull()
+  })
+
+  it('shows the note on search hits and memory_get', () => {
+    const { m, reply } = chain()
+    const hit = m.searchLedger('Hetzner VPS').find((h) => h.ref === `L${reply.id}`)
+    expect(hit?.outdated).toMatch(/replaced by F\d+: stockmate hosting: DigitalOcean/)
+    expect((m.get(`L${reply.id}`)?.record as { outdated?: string }).outdated).toMatch(/DigitalOcean/)
+  })
+
+  it('does not treat a merged duplicate as a change, and reports facts that stopped being true', () => {
+    const m = mk()
+    const a = m.append('owner', 'I like short replies')
+    const f1 = m.factWrite({ kind: 'preference', subject: 'replies', body: 'short', source: `L${a.id}` })
+    const f2 = m.factWrite({ kind: 'preference', subject: 'replies', body: 'brief', source: 'owner' })
+    m.factMerge(f1.id, f2.id)
+    expect(m.outdated(a)).toBeNull()
+    m.factMarkStale(f2.id, 'owner changed their mind')
+    expect(m.outdated(a)).toBe(`outdated: F${f1.id} is no longer true`)
+  })
+})

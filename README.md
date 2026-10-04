@@ -161,6 +161,31 @@ node src/sleep.ts              # run it now
 
 The prompt is `prompts/sleep.md` (`JARVIS_SLEEP_PROMPT_FILE`).
 
+## Long-run eval
+
+`src/eval/` drives the real captain through hundreds of scripted turns to check
+that it does not degrade over a very long chat:
+
+- 20 facts and decisions are planted in the first fifth of the run, 4 of them
+  change later, and hundreds of noise turns sit in between.
+- In the last third, every planted fact is asked twice: once directly and once
+  paraphrased with no search term in common (a unit test enforces that).
+  Changed facts must come back with the new value; 8 questions about things
+  never said must get "I don't have that".
+- Sessions rotate for real and the nightly sleep runs every N turns, so most
+  probes are answered several sessions after the fact was said.
+- Scoring is against the ledger: keywords for the answer, and every cited id
+  must exist and point at a record that holds the answer.
+
+```sh
+node src/eval/run.ts --data /tmp/jarvis-eval --turns 520 --model haiku    # resumable
+node src/eval/run.ts --data /tmp/jarvis-eval --report                      # report only
+JARVIS_MAX_TURNS=10 node src/eval/run.ts --data /tmp/smoke --turns 40 --plants 4 --sleep-every 20
+```
+
+It writes `eval.jsonl` (one line per turn), `report.md` and `report.json` into
+the data folder. Results are in `docs/eval.md`.
+
 ## How it works
 
 ```

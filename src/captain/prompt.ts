@@ -75,7 +75,7 @@ export function buildTurnPrompt(
     }
     parts.push(
       `<recalled note="keyword matches for the message below; may be partial or irrelevant, use memory_search for more">\n${fresher
-        .map((h) => `${h.ref} (${h.date.slice(0, 10)}) ${h.title}: ${clip(h.text, 600)}`)
+        .map((h) => `${h.ref} (${h.date.slice(0, 10)}) ${h.title}: ${clip(h.text, 600)}${h.outdated ? ` [${h.outdated}]` : ''}`)
         .join('\n')}\n</recalled>`,
     )
   }

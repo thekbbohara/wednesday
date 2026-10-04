@@ -40,7 +40,16 @@ export interface AgentRow {
   updated_at: string
 }
 
-export interface Hit { ref: string; kind: 'fact' | 'ledger' | 'task'; title: string; text: string; date: string; score: number }
+export interface Hit {
+  ref: string
+  kind: 'fact' | 'ledger' | 'task'
+  title: string
+  text: string
+  date: string
+  score: number
+  /** Set on ledger hits whose content a later fact replaced. */
+  outdated?: string
+}
 
 export interface StoreOptions {
   /** Max characters of the Now layer (~4 chars per token). */
@@ -449,6 +458,68 @@ export class Memory {
     return r ? toLedger(r) : null
   }
 
+  // ---- staleness of history ------------------------------------------------
+
+  /**
+   * Whether a ledger entry says something memory has since replaced. The
+   * ledger is history and never changes, so an old message ("we host on
+   * Hetzner") reads as current unless it is linked to the facts that
+   * superseded it. Links: facts saved from the entry's turn, facts it cites,
+   * and ledger entries it cites (one level down). Merges are not changes.
+   */
+  outdated(entry: LedgerEntry, depth = 0): string | null {
+    const replaced: number[] = []
+    // The turn this entry belongs to: a reply points at the owner message, a write at the message before it.
+    const anchors = new Set<number>([entry.id])
+    for (const id of (entry.meta?.reply_to as number[] | undefined) ?? []) anchors.add(id)
+    if (entry.kind !== 'owner' && entry.kind !== 'captain') {
+      const owner = this.db.prepare("SELECT max(id) AS id FROM ledger WHERE kind = 'owner' AND id < ?").get(entry.id) as { id: number | null }
+      if (owner.id) anchors.add(owner.id)
+    }
+    const sourced = this.db
+      .prepare(`SELECT id FROM facts WHERE stale = 1 AND source IN (${[...anchors].map(() => '?').join(',')})`)
+      .all(...[...anchors].map((a) => `L${a}`)) as { id: number }[]
+    replaced.push(...sourced.map((r) => r.id))
+    if (typeof entry.meta?.fact === 'number') replaced.push(entry.meta.fact)
+    for (const m of entry.text.matchAll(/\bF(\d+)\b/g)) replaced.push(Number(m[1]))
+
+    for (const id of new Set(replaced)) {
+      const f = this.factGet(id)
+      if (!f?.stale) continue
+      const now = this.currentFact(id)
+      if (now && now.id !== id && !this.changedBetween(id, now.id)) continue // only merged
+      return now ? `outdated: F${id} was replaced by F${now.id}: ${now.subject}: ${now.body}` : `outdated: F${id} is no longer true`
+    }
+    if (depth < 1) {
+      for (const m of entry.text.matchAll(/\[(?:[FTL]\d+\s*,\s*)*L(\d+)/g)) {
+        const cited = this.ledgerGet(Number(m[1]))
+        const note = cited && cited.id !== entry.id ? this.outdated(cited, depth + 1) : null
+        if (note) return note
+      }
+    }
+    return null
+  }
+
+  /** Follows superseded_by to the live fact, or null if the chain ends in a fact marked untrue. */
+  private currentFact(id: number): Fact | null {
+    let f = this.factGet(id)
+    for (let hops = 0; f && f.stale && hops < 20; hops++) f = f.superseded_by ? this.factGet(f.superseded_by) : null
+    return f && !f.stale ? f : null
+  }
+
+  /** True when the chain from `from` to `to` has at least one real change, not only duplicate merges. */
+  private changedBetween(from: number, to: number): boolean {
+    let f = this.factGet(from)
+    for (let hops = 0; f && f.id !== to && hops < 20; hops++) {
+      const merged = this.db
+        .prepare("SELECT 1 FROM ledger WHERE kind = 'fact' AND json_extract(meta, '$.fact') = ? AND json_extract(meta, '$.into') IS NOT NULL")
+        .get(f.id)
+      if (!merged) return true
+      f = f.superseded_by ? this.factGet(f.superseded_by) : null
+    }
+    return false
+  }
+
   // ---- search -------------------------------------------------------------
 
   searchFacts(query: string, limit = 8, includeStale = false): Hit[] {
@@ -488,7 +559,10 @@ export class Memory {
          WHERE ledger_fts MATCH ? ${extra} ORDER BY score LIMIT ?`,
       )
       .all(...args) as Row[]
-    return rows.map((r) => ({ ref: `L${r.id}`, kind: 'ledger', title: String(r.kind), text: String(r.snip), date: String(r.ts), score: Number(r.score) }))
+    return rows.map((r) => {
+      const outdated = this.outdated(toLedger(r)) ?? undefined
+      return { ref: `L${r.id}`, kind: 'ledger', title: String(r.kind), text: String(r.snip), date: String(r.ts), score: Number(r.score), ...(outdated ? { outdated } : {}) }
+    })
   }
 
   searchTasks(query: string, limit = 8): Hit[] {
@@ -526,7 +600,9 @@ export class Memory {
     const p = parseRef(ref)
     if (!p) return null
     const record = p.kind === 'fact' ? this.factGet(p.id) : p.kind === 'task' ? this.taskGet(p.id) : this.ledgerGet(p.id)
-    return record ? { ref: ref.toUpperCase(), kind: p.kind, record } : null
+    if (!record) return null
+    const outdated = p.kind === 'ledger' ? this.outdated(record as LedgerEntry) : null
+    return { ref: ref.toUpperCase(), kind: p.kind, record: outdated ? { ...record, outdated } : record }
   }
 }
 

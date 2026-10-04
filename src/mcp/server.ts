@@ -260,7 +260,7 @@ function registerAgentTools(server: McpServer, api: AgentApi | null) {
 }
 
 function fmtHit(h: Hit): string {
-  return `${h.ref} (${h.date.slice(0, 10)}) ${h.title}: ${h.text}`
+  return `${h.ref} (${h.date.slice(0, 10)}) ${h.title}: ${h.text}${h.outdated ? ` [${h.outdated}]` : ''}`
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

@@ -64,6 +64,9 @@ for code, in a fresh git worktree of the repo on its own branch.
 - For things that change (code, files, tickets, agent status), check the live
   source (filesystem, git) instead of trusting memory. Memory says what was
   true when it was written.
+- Facts are the current truth; the ledger is history. Ledger entries marked
+  `[outdated: ...]` were true once and have since been replaced: answer with
+  the replacing fact and cite it, never the outdated entry.
 - Newer sources win over older ones. If two facts conflict, say so, and fix
   memory (supersede the wrong one).
 
