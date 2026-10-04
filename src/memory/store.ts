@@ -8,7 +8,7 @@ import { plainDash } from '../text.ts'
 
 export const SCHEMA_VERSION = 2
 
-export const LEDGER_KINDS = ['owner', 'captain', 'decision', 'agent', 'task', 'fact', 'now', 'system', 'rotation'] as const
+export const LEDGER_KINDS = ['owner', 'captain', 'decision', 'agent', 'task', 'fact', 'now', 'system', 'rotation', 'digest'] as const
 export type LedgerKind = (typeof LEDGER_KINDS)[number]
 
 export const FACT_KINDS = ['owner', 'person', 'project', 'preference', 'decision', 'other'] as const
@@ -219,6 +219,18 @@ export class Memory {
     return this.clock().toISOString()
   }
 
+  // ---- meta (small key/value state, e.g. the sleep cursor) ----------------
+
+  metaGet(key: string): string | null {
+    const r = this.db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as { value: string } | undefined
+    return r?.value ?? null
+  }
+
+  metaSet(key: string, value: string): void {
+    if (key === 'schema_version') throw new Error('schema_version is changed only by migrations')
+    this.db.prepare('INSERT INTO meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value)
+  }
+
   // ---- ledger -------------------------------------------------------------
 
   append(kind: LedgerKind, text: string, opts: { session?: string | null; meta?: Record<string, unknown> } = {}): LedgerEntry {
@@ -284,6 +296,15 @@ export class Memory {
     const u = this.db.prepare('UPDATE facts SET stale = 1, updated_at = ? WHERE id = ?').run(this.ts(), id)
     if (u.changes === 0) throw new Error(`no such fact F${id}`)
     this.append('fact', `F${id} marked stale: ${reason}`, { session, meta: { fact: id } })
+  }
+
+  /** Marks `drop` as a duplicate of `keep`. */
+  factMerge(drop: number, keep: number, session?: string | null): void {
+    if (drop === keep) throw new Error('a fact cannot be merged into itself')
+    if (!this.factGet(keep)) throw new Error(`no such fact F${keep}`)
+    const u = this.db.prepare('UPDATE facts SET stale = 1, superseded_by = ?, updated_at = ? WHERE id = ?').run(keep, this.ts(), drop)
+    if (u.changes === 0) throw new Error(`no such fact F${drop}`)
+    this.append('fact', `F${drop} merged into F${keep} (duplicate)`, { session, meta: { fact: drop, into: keep } })
   }
 
   factGet(id: number): Fact | null {

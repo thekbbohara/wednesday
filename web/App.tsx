@@ -183,7 +183,7 @@ export function App() {
 
       {popover && (
         <Popover x={popover.x} y={popover.y} alignEnd={popover.kind === "agent"} label={popover.kind === "ref" ? popover.ref : popover.id} onClose={closePopover}>
-          {popover.kind === "ref" ? <RefBody target={popover.ref} /> : <AgentBody id={popover.id} onRef={openRef} />}
+          {popover.kind === "ref" ? <RefBody target={popover.ref} onRef={openRef} /> : <AgentBody id={popover.id} onRef={openRef} />}
         </Popover>
       )}
     </div>
@@ -359,6 +359,16 @@ function RowView({ row, onRef, colors }: { row: Row; onRef: OnRef; colors: Map<s
       );
     case "error":
       return <ErrorNotice item={row.item} retryable={row.retryable} />;
+    case "digest":
+      return (
+        <div className="agent-row agent-row--digest" title={fullTime(row.item.ts)}>
+          <Face id="jarvis" mood="offline" color={JARVIS_COLOR} size={20} badge={false} />
+          <span className="agent-row__text">{row.item.text}</span>
+          <button className="chip" onClick={(e) => onRef(`L${row.item.id}`, e)}>
+            L{row.item.id}
+          </button>
+        </div>
+      );
     case "agent": {
       const { item } = row;
       const tone = item.event === "needs" ? " agent-row--needs" : item.event === "error" ? " agent-row--error" : "";
@@ -573,7 +583,28 @@ function Popover({ x, y, alignEnd = false, label, onClose, children }: { x: numb
   );
 }
 
-function RefBody({ target }: { target: string }) {
+/** Plain text with [F3]-style citations as chips. */
+function Cited({ text, onRef }: { text: string; onRef: OnRef }) {
+  return (
+    <>
+      {splitCitations(text).map((part, i) =>
+        typeof part === "string" ? (
+          part
+        ) : (
+          <span key={i}>
+            {part.map((ref) => (
+              <button key={ref} className="chip" onClick={(e) => onRef(ref, e)}>
+                {ref}
+              </button>
+            ))}
+          </span>
+        ),
+      )}
+    </>
+  );
+}
+
+function RefBody({ target, onRef }: { target: string; onRef: OnRef }) {
   const [info, setInfo] = useState<RefInfo | null>(null);
   const [err, setErr] = useState("");
 
@@ -592,7 +623,9 @@ function RefBody({ target }: { target: string }) {
         <span className="popover__title">{info.title}</span>
         {info.stale && <span className="popover__stale">outdated</span>}
       </div>
-      <p className="popover__body">{info.body}</p>
+      <p className="popover__body">
+        <Cited text={info.body} onRef={onRef} />
+      </p>
       <p className="popover__meta">
         {info.date ? fullTime(info.date) : ""}
         {info.source ? ` · from ${info.source}` : ""}

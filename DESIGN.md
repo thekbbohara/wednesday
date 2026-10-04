@@ -99,6 +99,11 @@ pi #b28cf5, opencode #4fd1a5, kimi #f78fb3, other #8fb3c9.
 - **Receipts**: under a captain message, one 12px --muted line of what the
   captain wrote to memory during that turn: "saved F3 . updated T1 . updated
   now". Each id is a chip. Omitted when nothing was written.
+- **Overnight row**: after the nightly sleep, one row at captain indent like
+  the agent row: Jarvis's face asleep (closed eyes, 20px), 13px --muted text
+  "Overnight I tidied memory: 3 new facts, 1 updated, 2 outdated" and the
+  digest's ledger chip (opens the day's digest). The sleep's own fact
+  receipts are never shown; nothing else about the sleep is.
 - **Owner message**: right-aligned, --ink fill, white text, max 80% width,
   plain text with line breaks kept.
 - **Pending**: while the captain works, a captain row with the working face

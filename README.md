@@ -4,9 +4,8 @@ One chat, forever. The owner talks to a single captain; the captain keeps its
 memory outside the LLM session, so the session can be thrown away and rebuilt
 at any time without losing anything. See `BRIEF.md` for the full intent.
 
-Status: **steps 1-3 done** - memory, captain, session rotation, terminal
-chat, web chat, worker agents. Not yet: nightly sleep (step 4), long-run eval
-(step 5).
+Status: **steps 1-4 done** - memory, captain, session rotation, terminal
+chat, web chat, worker agents, nightly sleep. Not yet: long-run eval (step 5).
 
 ## Run it
 
@@ -98,6 +97,8 @@ Memory lives in the `jarvis-data` volume. To keep it in a host folder,
 | `JARVIS_CLAUDE_BIN`       | `claude`           | Claude Code binary. |
 | `HOST` / `PORT`           | `127.0.0.1` / `4788` | Web server address. |
 | `JARVIS_TMUX_SOCKET`      | `jarvis`           | Private tmux socket for the agents. |
+| `JARVIS_SLEEP_AT`         | `04:00`            | Local time of the nightly sleep; empty turns it off. |
+| `JARVIS_SLEEP_MODEL`      | `haiku`            | Model for the sleep. |
 | `JARVIS_TOKEN`            | none               | Shared secret for the web chat (cookie via `/?token=`, or `Authorization: Bearer`). |
 
 ## Agents
@@ -131,6 +132,34 @@ Runtimes are configured like agent-hq's, in `<data>/runtimes.json`:
 ```json
 [{ "id": "claude-code", "command": "claude --model sonnet --permission-mode auto" }]
 ```
+
+## Nightly sleep
+
+Once a day (`JARVIS_SLEEP_AT`, default 04:00 local, run by the web server) a
+cheap model (`JARVIS_SLEEP_MODEL`, default haiku) reads the ledger since the
+last sleep, one day at a time, next to the current facts, and proposes:
+
+- **add** a durable fact stated that day (with the L id it came from),
+- **supersede** facts that changed (newer source wins; the old one is marked
+  stale and points to the new one),
+- **stale** facts that stopped being true,
+- **merge** duplicates,
+- a **digest** of the day, appended to the ledger and citable like any entry.
+
+The model returns schema-checked JSON (`claude -p --json-schema`) and has no
+tools; code validates every operation before applying it (sources must be L
+ids from that day, fact ids must exist and still be live, nothing touched
+twice) and counts what it refused. Nothing is deleted. The cursor moves only
+after a day is fully applied, so a failed night is retried 30 minutes later.
+It holds the captain's turn lock while applying. In the chat it is one row:
+"Overnight I tidied memory: 3 new facts, 1 updated"; the chip opens the digest.
+
+```sh
+node src/sleep.ts --dry-run    # show what it would change
+node src/sleep.ts              # run it now
+```
+
+The prompt is `prompts/sleep.md` (`JARVIS_SLEEP_PROMPT_FILE`).
 
 ## How it works
 
@@ -213,6 +242,8 @@ pnpm test          # memory, retrieval quality, MCP over stdio, captain loop and
 pnpm test:live     # real claude (haiku): rotate, then a fresh session must answer
                    # "what are we doing and why" from memory alone (tail disabled),
                    # and must say "I don't have that" for an unknown fact
+JARVIS_LIVE=1 npx vitest run test/sleep.test.ts   # real sleep on a seeded day: a
+                   # contradiction, a duplicate, a new fact and chit-chat
 pnpm typecheck
 ```
 
@@ -248,6 +279,10 @@ src/agents/tmux.ts       tmux driver (from agent-hq)
 src/agents/hooks.ts      turn hook script and CLI args
 src/agents/runtimes.ts   agent CLIs and runtimes.json
 src/migrate.ts           schema upgrades, run by hand
+src/sleep/sleep.ts       nightly consolidation: prompt, validation, apply
+src/sleep/schedule.ts    daily schedule inside the server
+src/sleep.ts             run the sleep by hand (--dry-run)
+prompts/sleep.md         sleep model prompt
 prompts/captain.md       captain system prompt
 web/                     React UI (DESIGN.md); Face.tsx is shared with agent-hq
 test/demo-server.ts      scripted captain + fake agents for UI work

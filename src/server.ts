@@ -13,6 +13,8 @@ import { ClaudeRunner, type Runner } from './captain/runner.ts'
 import { chatPage, describeRef, toChatItem, type ChatItem } from './web/chat.ts'
 import { Supervisor, SupervisorError, type AgentView } from './agents/supervisor.ts'
 import type { LedgerEntry } from './memory/store.ts'
+import { ClaudeSleepModel } from './sleep/sleep.ts'
+import { startSleepSchedule } from './sleep/schedule.ts'
 
 export interface Agent {
   id: string
@@ -297,5 +299,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const supervisor = new Supervisor({ mem, dataDir: cfg.dataDir, socket: process.env.JARVIS_TMUX_SOCKET || 'jarvis', hook: { url: selfUrl, token } })
   supervisor.start()
   const { app } = createApp({ mem, cfg, runner, token, supervisor, selfUrl, webRoot: resolve(import.meta.dirname, '../dist') })
-  serve({ fetch: app.fetch, hostname: host, port }, () => console.log(`jarvis on http://${host}:${port} - memory ${cfg.dbPath} - model ${cfg.model}`))
+  startSleepSchedule(mem, cfg, new ClaudeSleepModel({ bin: cfg.claudeBin, model: cfg.sleepModel, promptFile: cfg.sleepPromptFile, timeoutSec: cfg.turnTimeout, cwd: cfg.dataDir }))
+  serve({ fetch: app.fetch, hostname: host, port }, () => console.log(`jarvis on http://${host}:${port} - memory ${cfg.dbPath} - model ${cfg.model} - sleep ${cfg.sleepAt || 'off'}`))
 }

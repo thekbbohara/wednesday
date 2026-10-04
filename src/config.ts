@@ -23,6 +23,10 @@ export interface Config {
   promptFile: string
   /** Seconds before a captain turn is abandoned. */
   turnTimeout: number
+  /** Local time of the nightly sleep, "HH:MM"; empty disables the schedule. */
+  sleepAt: string
+  sleepModel: string
+  sleepPromptFile: string
 }
 
 const env = process.env
@@ -55,8 +59,12 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     nowBudgetChars: num('JARVIS_NOW_BUDGET_CHARS', 8000),
     promptFile: env.JARVIS_PROMPT_FILE || resolve(import.meta.dirname, '../prompts/captain.md'),
     turnTimeout: num('JARVIS_TURN_TIMEOUT', 600),
+    sleepAt: env.JARVIS_SLEEP_AT ?? '04:00',
+    sleepModel: env.JARVIS_SLEEP_MODEL || 'haiku',
+    sleepPromptFile: env.JARVIS_SLEEP_PROMPT_FILE || resolve(import.meta.dirname, '../prompts/sleep.md'),
   }
   const cfg = { ...base, ...overrides }
   if (overrides.dataDir && !overrides.dbPath) cfg.dbPath = join(cfg.dataDir, 'memory.db')
+  if (cfg.sleepAt && !/^([01]\d|2[0-3]):[0-5]\d$/.test(cfg.sleepAt)) throw new Error(`JARVIS_SLEEP_AT must be HH:MM (24h) or empty, got "${cfg.sleepAt}"`)
   return cfg
 }

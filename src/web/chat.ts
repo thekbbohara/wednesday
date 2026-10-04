@@ -2,20 +2,29 @@
 // conversation, receipts of what the captain wrote to memory, and failures.
 // Session starts and rotations stay invisible.
 import type { LedgerEntry, Memory } from '../memory/store.ts'
+import { SLEEP_SESSION, summaryLine } from '../sleep/sleep.ts'
 
 export type ChatItem =
   | { type: 'owner' | 'captain'; id: number; ts: string; text: string }
   | { type: 'receipt'; id: number; ts: string; verb: string; ref: string }
   | { type: 'error'; id: number; ts: string; text: string }
   | { type: 'agent'; id: number; ts: string; agent: string; event: string; text: string }
+  | { type: 'digest'; id: number; ts: string; text: string }
 
-const SHOWN = ['owner', 'captain', 'fact', 'task', 'decision', 'now', 'system', 'agent'] as const
+const SHOWN = ['owner', 'captain', 'fact', 'task', 'decision', 'now', 'system', 'agent', 'digest'] as const
 /** Agent events the owner sees; the captain's own messages and answers to agents stay in the ledger. */
 const SHOWN_AGENT_EVENTS = new Set(['spawn', 'report', 'needs', 'exit', 'error', 'stop'])
 
 export function toChatItem(e: LedgerEntry): ChatItem | null {
   const base = { id: e.id, ts: e.ts }
+  // The nightly sleep shows as one overnight row (its digest), not a stream of receipts.
+  if (e.session === SLEEP_SESSION && e.kind !== 'digest') return null
   switch (e.kind) {
+    case 'digest': {
+      const m = e.meta ?? {}
+      const counts = { added: Number(m.added ?? 0), superseded: Number(m.superseded ?? 0), staled: Number(m.staled ?? 0), merged: Number(m.merged ?? 0) }
+      return { ...base, type: 'digest', text: `Overnight I tidied memory: ${summaryLine(counts)}` }
+    }
     case 'owner':
       return { ...base, type: e.kind, text: e.text }
     case 'captain':
@@ -29,7 +38,8 @@ export function toChatItem(e: LedgerEntry): ChatItem | null {
     case 'fact': {
       const id = e.meta?.fact
       if (typeof id !== 'number') return null
-      return { ...base, type: 'receipt', verb: / marked stale: /.test(e.text) ? 'marked stale' : 'saved', ref: `F${id}` }
+      const verb = / marked stale: /.test(e.text) ? 'marked stale' : / merged into /.test(e.text) ? 'merged' : 'saved'
+      return { ...base, type: 'receipt', verb, ref: `F${id}` }
     }
     case 'task': {
       const id = e.meta?.task
@@ -120,6 +130,10 @@ export function describeRef(mem: Memory, ref: string): { ref: string; title: str
         const meta = (r.meta ?? {}) as Record<string, unknown>
         const body = String(r.text).replace(/^\S+ reported:\n/, '')
         return { ref: got.ref, title: `${meta.agent ?? 'Agent'}, ${String(meta.event ?? 'event')}`, body, date: String(r.ts) }
+      }
+      if (kind === 'digest') {
+        const meta = (r.meta ?? {}) as Record<string, unknown>
+        return { ref: got.ref, title: `Digest of ${meta.date ?? 'the day'}`, body: String(r.text).replace(/^Digest \S+: /, ''), date: String(r.ts) }
       }
       const who = kind === 'owner' ? 'You said' : kind === 'captain' ? 'Jarvis said' : kind[0].toUpperCase() + kind.slice(1)
       return { ref: got.ref, title: who, body: String(r.text), date: String(r.ts) }

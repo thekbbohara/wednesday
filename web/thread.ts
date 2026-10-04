@@ -4,6 +4,7 @@ type Receipt = Extract<ChatItem, { type: "receipt" }>;
 type Message = Extract<ChatItem, { type: "owner" | "captain" }>;
 type ErrorItem = Extract<ChatItem, { type: "error" }>;
 type AgentItem = Extract<ChatItem, { type: "agent" }>;
+type DigestItem = Extract<ChatItem, { type: "digest" }>;
 
 export type Row =
   | { kind: "day"; key: string; label: string }
@@ -11,7 +12,8 @@ export type Row =
   | { kind: "captain"; key: string; item: Message; first: boolean; receipts: Receipt[] }
   | { kind: "receipts"; key: string; receipts: Receipt[] }
   | { kind: "error"; key: string; item: ErrorItem; retryable: boolean }
-  | { kind: "agent"; key: string; item: AgentItem };
+  | { kind: "agent"; key: string; item: AgentItem }
+  | { kind: "digest"; key: string; item: DigestItem };
 
 export function dayLabel(d: Date, now = new Date()): string {
   const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
@@ -76,6 +78,11 @@ export function buildRows(items: ChatItem[], now = new Date()): { rows: Row[]; t
         flush();
         rows.push({ kind: "owner", key: `m${item.id}`, item, first: lastSide !== "owner" });
         lastSide = "owner";
+        break;
+      case "digest":
+        flush();
+        rows.push({ kind: "digest", key: `g${item.id}`, item });
+        lastSide = null;
         break;
       case "agent":
         // Receipts keep accumulating: they belong to the captain reply that follows.
