@@ -31,6 +31,7 @@ export interface Agent {
 export interface SkillView extends Skill, Progress {}
 
 export interface Status {
+  name: string
   thinking: boolean
   agents: Agent[]
   model: string
@@ -89,6 +90,7 @@ export function createApp(opts: {
     const exp = mem.expBySkill()
     const total = [...exp.values()].reduce((a, b) => a + b, 0)
     return {
+      name: cfg.name,
       thinking: captain.busy || existsSync(lockPath),
       agents: sup ? sup.list().map(toAgent) : (opts.agents?.() ?? []),
       model: cfg.model,
@@ -215,7 +217,7 @@ export function createApp(opts: {
   })
 
   app.get('/api/ref/:ref', (c) => {
-    const r = describeRef(mem, c.req.param('ref'))
+    const r = describeRef(mem, c.req.param('ref'), cfg.name)
     return r ? c.json(r) : c.json({ error: 'not found' }, 404)
   })
 
@@ -370,9 +372,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (!token && host !== '127.0.0.1' && host !== 'localhost') console.warn(`warning: listening on ${host} without JARVIS_TOKEN`)
   // Where agents' hooks and the captain's tools reach this server (loopback when listening on all addresses).
   const selfUrl = `http://${host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host}:${port}`
-  const supervisor = new Supervisor({ mem, dataDir: cfg.dataDir, socket: process.env.JARVIS_TMUX_SOCKET || 'jarvis', hook: { url: selfUrl, token } })
+  const supervisor = new Supervisor({ mem, name: cfg.name, dataDir: cfg.dataDir, socket: process.env.JARVIS_TMUX_SOCKET || 'jarvis', hook: { url: selfUrl, token } })
   supervisor.start()
   const { app } = createApp({ mem, cfg, runner, token, supervisor, selfUrl, persistSettings: true, webRoot: resolve(import.meta.dirname, '../dist') })
-  startSleepSchedule(mem, cfg, new ClaudeSleepModel({ bin: cfg.claudeBin, model: () => cfg.sleepModel, promptFile: cfg.sleepPromptFile, timeoutSec: cfg.turnTimeout, cwd: cfg.dataDir }))
-  serve({ fetch: app.fetch, hostname: host, port }, () => console.log(`jarvis on http://${host}:${port} - memory ${cfg.dbPath} - model ${cfg.model} - sleep ${cfg.sleepAt || 'off'}`))
+  startSleepSchedule(mem, cfg, new ClaudeSleepModel({ bin: cfg.claudeBin, model: () => cfg.sleepModel, promptFile: cfg.sleepPromptFile, timeoutSec: cfg.turnTimeout, cwd: cfg.dataDir, name: cfg.name }))
+  serve({ fetch: app.fetch, hostname: host, port }, () => console.log(`${cfg.name} on http://${host}:${port} - memory ${cfg.dbPath} - model ${cfg.model} - sleep ${cfg.sleepAt || 'off'}`))
 }

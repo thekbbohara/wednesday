@@ -56,9 +56,9 @@ export interface SleepModel {
 
 /** Headless Claude Code with schema-checked output; no tools, no session kept. */
 export class ClaudeSleepModel implements SleepModel {
-  private opts: { bin: string; model: string | (() => string); promptFile: string; timeoutSec: number; cwd: string }
+  private opts: { bin: string; model: string | (() => string); promptFile: string; timeoutSec: number; cwd: string; name?: string }
 
-  constructor(opts: { bin: string; model: string | (() => string); promptFile: string; timeoutSec: number; cwd: string }) {
+  constructor(opts: { bin: string; model: string | (() => string); promptFile: string; timeoutSec: number; cwd: string; name?: string }) {
     this.opts = opts
   }
 
@@ -71,7 +71,7 @@ export class ClaudeSleepModel implements SleepModel {
       '--strict-mcp-config',
       '--tools', '',
       '--no-session-persistence',
-      '--system-prompt', readFileSync(this.opts.promptFile, 'utf8'),
+      '--system-prompt', readFileSync(this.opts.promptFile, 'utf8').replaceAll('{{NAME}}', this.opts.name ?? 'Jarvis'),
       '--json-schema', JSON.stringify(OPS_SCHEMA),
     ]
     return new Promise((resolve, reject) => {

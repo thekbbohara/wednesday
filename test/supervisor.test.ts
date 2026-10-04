@@ -156,8 +156,9 @@ describe('supervisor', () => {
 
 describe('composeBrief', () => {
   it('tells a worktree agent its branch and how to report', () => {
-    const b = composeBrief({ id: 'fixer', task_id: 3, cwd: '/w', branch: 'jarvis/fixer', brief: 'Fix the bug.' }, 'Bug')
-    expect(b).toContain('gave you this job (task T3: Bug):')
+    const b = composeBrief({ id: 'fixer', task_id: 3, cwd: '/w', branch: 'jarvis/fixer', brief: 'Fix the bug.' }, 'Bug', 'Friday')
+    expect(b).toContain('Friday, the owner\'s assistant, gave you this job (task T3: Bug):')
+    expect(b).toContain('Friday reads only your final message')
     expect(b).toContain('on branch jarvis/fixer')
     expect(b).toContain('end your turn with a short report')
   })

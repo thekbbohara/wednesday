@@ -207,7 +207,7 @@ function Field({ label, text, onRef }: { label: string; text: string; onRef: OnR
 
 // ---------- Memory ----------
 
-export function MemoryPage({ version, onRef }: { version: number; onRef: OnRef }) {
+export function MemoryPage({ version, onRef, name }: { version: number; onRef: OnRef; name: string }) {
   const { data, error } = useLoad(api.memory, version);
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<Hit[] | null>(null);
@@ -232,7 +232,7 @@ export function MemoryPage({ version, onRef }: { version: number; onRef: OnRef }
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden>
             <path d="M10.5 17.5a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM15.5 15.5l5 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
-          <input id="memory-search" name="q" type="search" placeholder="Search what Jarvis knows" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input id="memory-search" name="q" type="search" placeholder={`Search what ${name} knows`} value={q} onChange={(e) => setQ(e.target.value)} />
         </label>
       </PageHead>
       <div className="page__body">
@@ -262,7 +262,7 @@ export function MemoryPage({ version, onRef }: { version: number; onRef: OnRef }
                   ))}
                 </ul>
               ) : (
-                <p className="page__muted">No facts yet. Jarvis saves them as you talk.</p>
+                <p className="page__muted">No facts yet. {name} saves them as you talk.</p>
               )}
             </section>
 
@@ -383,7 +383,7 @@ function SearchResults({ hits, onRef }: { hits: Hit[]; onRef: OnRef }) {
 
 // ---------- Settings ----------
 
-export function SettingsPage() {
+export function SettingsPage({ name }: { name: string }) {
   const { data, error } = useLoad(api.settings, 0);
   const [s, setS] = useState<Settings | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -447,7 +447,7 @@ export function SettingsPage() {
           {row(
             "model",
             "Model",
-            "The model Jarvis thinks with. Applies from the next message.",
+            `The model ${name} thinks with. Applies from the next message.`,
             <select id="set-model" name="model" className="select" value={s.model} onChange={(e) => save({ model: e.target.value })}>
               {models.map((m) => (
                 <option key={m} value={m}>
@@ -459,7 +459,7 @@ export function SettingsPage() {
           {row(
             "web",
             "Web access",
-            "Lets Jarvis search the web and read pages to answer you.",
+            `Lets ${name} search the web and read pages to answer you.`,
             <Toggle id="set-web" on={s.web} onChange={(web) => save({ web })} label="Web access" />,
           )}
 
@@ -467,7 +467,7 @@ export function SettingsPage() {
           {row(
             "rotateAt",
             "Fresh session at",
-            "Jarvis starts a fresh session, rebuilt from memory, when the current one fills this share of its context.",
+            `${name} starts a fresh session, rebuilt from memory, when the current one fills this share of its context.`,
             <select id="set-rotateAt" name="rotateAt" className="select" value={String(s.rotateAt)} onChange={(e) => save({ rotateAt: Number(e.target.value) })}>
               {[0.2, 0.3, 0.4, 0.5, 0.6, 0.7].concat([s.rotateAt]).filter((v, i, a) => a.indexOf(v) === i).sort().map((v) => (
                 <option key={v} value={v}>
@@ -487,7 +487,7 @@ export function SettingsPage() {
           {row(
             "sleepAt",
             "Time",
-            "When Jarvis tidies memory and writes the day's digest (local time).",
+            `When ${name} tidies memory and writes the day's digest (local time).`,
             <div className="inline">
               <Toggle id="set-sleep-on" on={!!s.sleepAt} onChange={(on) => save({ sleepAt: on ? "04:00" : "" })} label="Nightly sleep" />
               {s.sleepAt && (

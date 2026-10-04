@@ -68,7 +68,7 @@ if (args.report) {
 
 const scenario = buildScenario({ turns: setup.turns, seed: setup.seed, plants: setup.plants ?? undefined })
 const captain = new Captain(mem, cfg, new ClaudeRunner({ bin: cfg.claudeBin, model: cfg.model, cwd: cfg.dataDir, allowedTools: cfg.allowedTools, timeoutSec: cfg.turnTimeout }))
-const sleeper = new ClaudeSleepModel({ bin: cfg.claudeBin, model: cfg.sleepModel, promptFile: cfg.sleepPromptFile, timeoutSec: cfg.turnTimeout, cwd: cfg.dataDir })
+const sleeper = new ClaudeSleepModel({ bin: cfg.claudeBin, model: cfg.sleepModel, promptFile: cfg.sleepPromptFile, timeoutSec: cfg.turnTimeout, cwd: cfg.dataDir, name: cfg.name })
 const done = new Set(rows.filter((r) => r.type === 'turn').map((r) => r.index))
 
 async function turn(t: Turn): Promise<void> {

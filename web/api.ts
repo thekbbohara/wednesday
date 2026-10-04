@@ -30,6 +30,7 @@ export interface SkillView extends Progress {
 }
 
 export interface Status {
+  name: string;
   thinking: boolean;
   agents: Agent[];
   model: string;

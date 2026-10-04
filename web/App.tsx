@@ -18,7 +18,7 @@ type Receipt = Extract<ChatItem, { type: "receipt" }>;
 export function App() {
   const [items, setItems] = useState<ChatItem[]>([]);
   const [hasMore, setHasMore] = useState(false);
-  const [status, setStatus] = useState<Status>({ thinking: false, agents: [], model: "", lastReplyAt: null, jarvis: { level: 1, exp: 0, floor: 0, next: 300 }, skills: [], waiting: 0 });
+  const [status, setStatus] = useState<Status>({ name: "Jarvis", thinking: false, agents: [], model: "", lastReplyAt: null, jarvis: { level: 1, exp: 0, floor: 0, next: 300 }, skills: [], waiting: 0 });
   const [page, goPage] = usePage();
   // Bumps on every ledger change, so open pages refresh themselves.
   const [version, setVersion] = useState(0);
@@ -86,7 +86,7 @@ export function App() {
   const stateText = !online ? "offline, reconnecting" : status.thinking ? "thinking..." : failed ? "couldn't reply" : "here";
 
   useEffect(() => {
-    document.title = status.thinking ? "Jarvis - thinking" : "Jarvis";
+    document.title = status.thinking ? `${status.name} - thinking` : status.name;
   }, [status.thinking]);
 
   // Scroll: stick to the bottom when already there; keep position when older items load.
@@ -206,11 +206,11 @@ export function App() {
             <div className="thread" ref={scroller} onScroll={onScroll}>
               <div className="thread__inner">
                 {hasMore && <div className="thread__more">Loading earlier messages</div>}
-                {loaded && !items.length && <Empty />}
+                {loaded && !items.length && <Empty name={status.name} />}
                 {rows.map((row) => (
-                  <RowView key={row.key} row={row} onRef={openRef} colors={colors} skills={skillMap} onSkills={() => goPage("skills")} />
+                  <RowView key={row.key} row={row} onRef={openRef} colors={colors} skills={skillMap} onSkills={() => goPage("skills")} jarvisName={status.name} />
                 ))}
-                {status.thinking && <Pending receipts={trailing} onRef={openRef} />}
+                {status.thinking && <Pending receipts={trailing} onRef={openRef} name={status.name} />}
                 {!status.thinking && trailing.length > 0 && <Receipts receipts={trailing} onRef={openRef} />}
               </div>
             </div>
@@ -224,7 +224,7 @@ export function App() {
                   New messages
                 </button>
               )}
-              <Composer onSend={send} />
+              <Composer onSend={send} name={status.name} />
             </footer>
           </div>
           {page === "skills" && (
@@ -239,12 +239,12 @@ export function App() {
           )}
           {page === "memory" && (
             <div className="page__view">
-              <MemoryPage version={version} onRef={openRef} />
+              <MemoryPage version={version} onRef={openRef} name={status.name} />
             </div>
           )}
           {page === "settings" && (
             <div className="page__view">
-              <SettingsPage />
+              <SettingsPage name={status.name} />
             </div>
           )}
         </section>
@@ -289,7 +289,7 @@ function Portrait({ mood, stateText, status }: { mood: Mood; stateText: string; 
       <Face id="jarvis" mood={mood} color={JARVIS_COLOR} size={narrow ? 52 : 96} badge={false} />
       <div className="portrait__info">
         <h1 className="portrait__name">
-          Jarvis <span className="lv">Lv {j.level}</span>
+          {status.name} <span className="lv">Lv {j.level}</span>
         </h1>
         <ExpBar p={j} color="var(--blue)" />
         <p className="portrait__exp">
@@ -425,11 +425,11 @@ function ago(ts: string, now: number): string {
 
 const MOOD_LABEL: Record<Mood, string> = { idle: "idle", working: "working", needs: "needs you", error: "error", offline: "offline" };
 
-function Empty() {
+function Empty({ name }: { name: string }) {
   return (
     <div className="empty">
       <Face id="jarvis" mood="idle" color={JARVIS_COLOR} size={64} badge={false} />
-      <p className="empty__title">Hi, I'm Jarvis.</p>
+      <p className="empty__title">Hi, I'm {name}.</p>
       <p className="empty__text">Tell me what you're working on. I'll remember it, keep track of the work, and get it done.</p>
     </div>
   );
@@ -444,12 +444,14 @@ function RowView({
   colors,
   skills,
   onSkills,
+  jarvisName,
 }: {
   row: Row;
   onRef: OnRef;
   colors: Map<string, string>;
   skills: Map<string, SkillView>;
   onSkills: () => void;
+  jarvisName: string;
 }) {
   switch (row.kind) {
     case "day":
@@ -488,10 +490,10 @@ function RowView({
         </div>
       );
     case "error":
-      return <ErrorNotice item={row.item} retryable={row.retryable} />;
+      return <ErrorNotice item={row.item} retryable={row.retryable} name={jarvisName} />;
     case "levelup": {
       const sk = skills.get(row.item.skill);
-      const name = row.item.skill === "jarvis" ? "Jarvis" : (sk?.name ?? row.item.skill);
+      const name = row.item.skill === "jarvis" ? jarvisName : (sk?.name ?? row.item.skill);
       const color = row.item.skill === "jarvis" ? "var(--blue-deep)" : (sk?.color ?? OTHER_COLOR);
       return (
         <div className="agent-row agent-row--levelup" title={fullTime(row.item.ts)}>
@@ -553,12 +555,12 @@ function Bubble({ side, ts, children }: { side: "owner" | "captain"; ts: string;
   );
 }
 
-function ErrorNotice({ item, retryable }: { item: Extract<ChatItem, { type: "error" }>; retryable: boolean }) {
+function ErrorNotice({ item, retryable, name }: { item: Extract<ChatItem, { type: "error" }>; retryable: boolean; name: string }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   return (
     <div className="notice" role="alert">
-      <span className="notice__text">Jarvis couldn't reply: {firstLine(item.text)}</span>
+      <span className="notice__text">{name} couldn't reply: {firstLine(item.text)}</span>
       {retryable && (
         <button
           className="notice__retry"
@@ -582,9 +584,9 @@ function ErrorNotice({ item, retryable }: { item: Extract<ChatItem, { type: "err
   );
 }
 
-function Pending({ receipts, onRef }: { receipts: Receipt[]; onRef: OnRef }) {
+function Pending({ receipts, onRef, name }: { receipts: Receipt[]; onRef: OnRef; name: string }) {
   return (
-    <div className="msg msg--captain msg--first msg--pending" aria-label="Jarvis is thinking">
+    <div className="msg msg--captain msg--first msg--pending" aria-label={`${name} is thinking`}>
       <div className="msg__face">
         <Face id="jarvis" mood="working" color={JARVIS_COLOR} size={28} badge={false} />
       </div>
@@ -843,7 +845,7 @@ function AgentBody({ id, onRef }: { id: string; onRef: OnRef }) {
   );
 }
 
-function Composer({ onSend }: { onSend: (text: string) => Promise<void> }) {
+function Composer({ onSend, name }: { onSend: (text: string) => Promise<void>; name: string }) {
   const [text, setText] = useState(() => {
     try {
       return localStorage.getItem(DRAFT_KEY) ?? "";
@@ -932,8 +934,8 @@ function Composer({ onSend }: { onSend: (text: string) => Promise<void> }) {
           className="composer__input"
           rows={1}
           value={text}
-          placeholder="Message Jarvis"
-          aria-label="Message Jarvis"
+          placeholder={`Message ${name}`}
+          aria-label={`Message ${name}`}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKey}
         />

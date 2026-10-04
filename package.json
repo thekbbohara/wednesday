@@ -10,11 +10,11 @@
     "jarvis": "src/cli.ts"
   },
   "scripts": {
-    "dev": "concurrently -k -n server,web \"node --watch --disable-warning=ExperimentalWarning src/server.ts\" \"vite\"",
+    "dev": "concurrently -k -n server,web \"node --watch --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/server.ts\" \"vite\"",
     "build": "vite build",
-    "start": "node --disable-warning=ExperimentalWarning src/server.ts",
-    "chat": "node --disable-warning=ExperimentalWarning src/cli.ts",
-    "mcp": "node --disable-warning=ExperimentalWarning src/mcp/server.ts",
+    "start": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/server.ts",
+    "chat": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/cli.ts",
+    "mcp": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/mcp/server.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p web",
     "test": "NODE_OPTIONS=--disable-warning=ExperimentalWarning vitest run",
     "test:live": "JARVIS_LIVE=1 NODE_OPTIONS=--disable-warning=ExperimentalWarning vitest run test/live.test.ts --silent=false"

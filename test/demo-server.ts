@@ -26,7 +26,7 @@ const mem = new Memory(cfg.dbPath)
 const delay = Number(process.env.DEMO_DELAY_MS ?? 1500)
 const port = Number(process.env.PORT || 4788)
 const selfUrl = `http://127.0.0.1:${port}`
-const sup = new Supervisor({ mem, dataDir: cfg.dataDir, socket: 'jarvis-demo', hook: null })
+const sup = new Supervisor({ mem, name: cfg.name, dataDir: cfg.dataDir, socket: 'jarvis-demo', hook: null })
 sup.start()
 
 class DemoRunner implements Runner {

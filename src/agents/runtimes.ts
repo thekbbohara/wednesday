@@ -21,6 +21,7 @@ const DEFAULT_RUNTIMES: Runtime[] = [
   { id: 'pi', label: 'pi', command: 'pi', interrupt: ['Escape'] },
   { id: 'kimi', label: 'Kimi', command: 'kimi', interrupt: ['Escape'] },
   { id: 'opencode', label: 'opencode', command: 'opencode', interrupt: ['Escape'] },
+  { id: 'agy', label: 'agy (Gemini)', command: 'agy', interrupt: ['Escape'] },
 ]
 
 /**

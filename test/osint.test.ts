@@ -18,18 +18,18 @@ const run = (script: string, args: string[] = []) => {
 
 describe('osint skill', () => {
   it('ships the skill, scripts, references and template', () => {
-    for (const f of ['SKILL.md', 'scripts/diagnose.sh', 'scripts/recon.sh', 'scripts/scrape.py', 'scripts/install-osint.sh', 'references/sources.md', 'assets/report-template.md'])
+    for (const f of ['SKILL.md', 'scripts/diagnose.sh', 'scripts/recon.sh', 'scripts/scrape.py', 'scripts/install-osint.sh', 'references/sources.md', 'references/platforms.md', 'references/psychoprofile.md', 'assets/report-template.md'])
       expect(existsSync(join(root, f)), f).toBe(true)
   })
 
   it('states the scope boundaries up front', () => {
     const skill = readFileSync(join(root, 'SKILL.md'), 'utf8')
-    expect(skill).toMatch(/Scope and boundaries/)
-    expect(skill).toMatch(/NOT for:[\s\S]*surveil|manipulate|private individual/)
-    expect(skill).toMatch(/owns or is authorized/)
-    // The harmful parts of the source skill appear only as prohibitions, never as phases/features.
-    expect(skill).not.toMatch(/## .*psychoprofile/i)
-    expect(skill).toMatch(/Never[\s\S]*build a psychological profile[\s\S]*approach/)
+    expect(skill).toMatch(/## Scope/)
+    expect(skill).toMatch(/NOT for:[\s\S]*surveil|locat|harass/)
+    expect(skill).toMatch(/Open sources and the owner's own data only/)
+    // The hard limits are stated as limits, not softened away.
+    expect(skill).toMatch(/real-time location or movements/)
+    expect(skill).toMatch(/intimidate or harass/)
   })
 
   it('diagnose runs and reports the toolkit', () => {

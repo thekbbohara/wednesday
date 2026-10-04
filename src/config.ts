@@ -2,6 +2,8 @@ import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 export interface Config {
+  /** The assistant's display name, shown in the UI, prompts and agent briefs. */
+  name: string
   dataDir: string
   dbPath: string
   /** Claude CLI binary. */
@@ -42,6 +44,7 @@ function num(name: string, fallback: number): number {
 export function loadConfig(overrides: Partial<Config> = {}): Config {
   const dataDir = resolve(env.JARVIS_DATA_DIR || join(homedir(), '.jarvis'))
   const base: Config = {
+    name: (env.ASSISTANT_NAME || 'Jarvis').trim() || 'Jarvis',
     dataDir,
     dbPath: join(dataDir, 'memory.db'),
     claudeBin: env.JARVIS_CLAUDE_BIN || 'claude',

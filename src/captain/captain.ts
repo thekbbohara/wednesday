@@ -48,7 +48,7 @@ export class Captain {
   }
 
   private systemPrompt(): string {
-    return readFileSync(this.cfg.promptFile, 'utf8')
+    return readFileSync(this.cfg.promptFile, 'utf8').replaceAll('{{NAME}}', this.cfg.name)
   }
 
   private mcpServers(sessionId: string) {

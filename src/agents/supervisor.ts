@@ -83,6 +83,8 @@ interface Tracker {
 
 export interface SupervisorOptions {
   mem: Memory
+  /** Assistant name, used in agent briefs and messages. */
+  name?: string
   dataDir: string
   socket: string
   /** Where agents' turn hooks reach Jarvis. */
@@ -95,6 +97,7 @@ export class Supervisor extends EventEmitter {
   readonly tmux: Tmux
   readonly runtimes: Runtime[]
   private mem: Memory
+  private name: string
   private dataDir: string
   private hook: SupervisorOptions['hook']
   private hookScript: string
@@ -107,6 +110,7 @@ export class Supervisor extends EventEmitter {
   constructor(opts: SupervisorOptions) {
     super()
     this.mem = opts.mem
+    this.name = opts.name ?? 'Jarvis'
     this.dataDir = opts.dataDir
     this.hook = opts.hook
     this.tmux = new Tmux(opts.socket)
@@ -220,7 +224,7 @@ export class Supervisor extends EventEmitter {
 
     const row = this.mem.agentCreate({ id, task_id: task?.id ?? null, runtime: runtime.id, cwd, repo, branch, brief })
     try {
-      await this.launch(row, runtime, composeBrief(row, task?.title ?? null))
+      await this.launch(row, runtime, composeBrief(row, task?.title ?? null, this.name))
     } catch (e) {
       this.mem.agentSetStatus(id, 'stopped')
       this.record(id, 'error', `${id} failed to start: ${(e as Error).message}`)
@@ -264,7 +268,7 @@ export class Supervisor extends EventEmitter {
     if (!text.trim()) throw new SupervisorError('Message is empty')
     await this.tmux.sendText(Supervisor.session(id), text)
     markSent(t)
-    this.record(id, 'message', `Jarvis to ${id}: ${text.length > 600 ? `${text.slice(0, 597)}...` : text}`)
+    this.record(id, 'message', `${this.name} to ${id}: ${text.length > 600 ? `${text.slice(0, 597)}...` : text}`)
   }
 
   /**
@@ -286,7 +290,7 @@ export class Supervisor extends EventEmitter {
       t.needsSent = null
       markSent(t)
     }
-    this.record(id, auto ? 'auto' : 'answer', auto ? `Jarvis accepted ${id}'s prompt: ${label}` : `Jarvis answered ${id}: ${label}`)
+    this.record(id, auto ? 'auto' : 'answer', auto ? `${this.name} accepted ${id}'s prompt: ${label}` : `${this.name} answered ${id}: ${label}`)
   }
 
   async interrupt(id: string): Promise<void> {
@@ -461,16 +465,16 @@ function markSent(t: Tracker): void {
 }
 
 /** The first message a worker gets. */
-export function composeBrief(a: Pick<AgentRow, 'id' | 'task_id' | 'cwd' | 'branch' | 'brief'>, taskTitle: string | null): string {
+export function composeBrief(a: Pick<AgentRow, 'id' | 'task_id' | 'cwd' | 'branch' | 'brief'>, taskTitle: string | null, name = 'Jarvis'): string {
   const task = a.task_id ? ` (task T${a.task_id}${taskTitle ? `: ${taskTitle}` : ''})` : ''
   const where = a.branch
     ? `You are in a fresh git worktree made for this job, on branch ${a.branch}. Commit your work there. Do not push, merge or open a PR unless the job says so.`
     : `Work in ${a.cwd}.`
   return [
-    `You are "${a.id}", a worker agent. Jarvis, the owner's assistant, gave you this job${task}:`,
+    `You are "${a.id}", a worker agent. ${name}, the owner's assistant, gave you this job${task}:`,
     a.brief,
     where,
-    'When you finish, or need a decision, end your turn with a short report: what you did, how you verified it, and what you need. Jarvis reads only your final message of each turn.',
+    `When you finish, or need a decision, end your turn with a short report: what you did, how you verified it, and what you need. ${name} reads only your final message of each turn.`,
   ].join('\n\n')
 }
 

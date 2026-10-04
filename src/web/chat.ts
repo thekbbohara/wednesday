@@ -99,7 +99,7 @@ export function chatPage(mem: Memory, before: number | null, limit: number): { i
 }
 
 /** What a citation chip shows. */
-export function describeRef(mem: Memory, ref: string): { ref: string; title: string; body: string; date: string; source?: string; stale?: boolean } | null {
+export function describeRef(mem: Memory, ref: string, name = 'Jarvis'): { ref: string; title: string; body: string; date: string; source?: string; stale?: boolean } | null {
   if (ref.toLowerCase() === 'now') {
     const n = mem.nowGet()
     return { ref: 'Now', title: `Now, version ${n.version}`, body: n.text || '(empty)', date: n.updated_at }
@@ -139,7 +139,7 @@ export function describeRef(mem: Memory, ref: string): { ref: string; title: str
         const meta = (r.meta ?? {}) as Record<string, unknown>
         return { ref: got.ref, title: `Digest of ${meta.date ?? 'the day'}`, body: String(r.text).replace(/^Digest \S+: /, ''), date: String(r.ts) }
       }
-      const who = kind === 'owner' ? 'You said' : kind === 'captain' ? 'Jarvis said' : kind[0].toUpperCase() + kind.slice(1)
+      const who = kind === 'owner' ? 'You said' : kind === 'captain' ? `${name} said` : kind[0].toUpperCase() + kind.slice(1)
       return { ref: got.ref, title: who, body: String(r.text), date: String(r.ts) }
     }
   }

@@ -31,3 +31,21 @@ describe('settings file', () => {
     expect(warnings[1]).toMatch(/not valid JSON/)
   })
 })
+
+describe('assistant name', () => {
+  it('comes from ASSISTANT_NAME, defaulting to Jarvis', async () => {
+    const { loadConfig } = await import('../src/config.ts')
+    const prev = process.env.ASSISTANT_NAME
+    try {
+      delete process.env.ASSISTANT_NAME
+      expect(loadConfig().name).toBe('Jarvis')
+      process.env.ASSISTANT_NAME = 'Friday'
+      expect(loadConfig().name).toBe('Friday')
+      process.env.ASSISTANT_NAME = '   '
+      expect(loadConfig().name).toBe('Jarvis')
+    } finally {
+      if (prev === undefined) delete process.env.ASSISTANT_NAME
+      else process.env.ASSISTANT_NAME = prev
+    }
+  })
+})

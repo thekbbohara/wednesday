@@ -112,6 +112,7 @@ environment. Everything else is environment variables (or `.env`):
 
 | Variable                  | Default            | Meaning |
 |---------------------------|--------------------|---------|
+| `ASSISTANT_NAME`          | `Jarvis`           | What the assistant calls itself (UI, prompts, agent briefs). |
 | `JARVIS_DATA_DIR`         | `~/.jarvis`        | Holds `memory.db`; also the captain's working directory. |
 | `JARVIS_MODEL`            | `opus`             | Captain model. |
 | `JARVIS_ROTATE_AT`        | `0.4`              | Rotate when context passes this fraction of the window. |
@@ -134,7 +135,7 @@ environment. Everything else is environment variables (or `.env`):
 ## Agents
 
 The captain delegates work to worker agents (Claude Code by default, also
-Codex, pi, Kimi, opencode). The supervisor runs inside the web server, so
+Codex, opencode, pi, Kimi, and agy/Gemini). The supervisor runs inside the web server, so
 agents need `pnpm start` (the terminal chat alone cannot run them).
 
 - **Isolation**: for code, each agent gets a fresh git worktree of the repo in
@@ -165,27 +166,32 @@ Runtimes are configured like agent-hq's, in `<data>/runtimes.json`:
 
 ## OSINT
 
-Jarvis can run open-source intelligence jobs for **authorized, legitimate use**:
-your own digital footprint, domains and infrastructure you own or are
-authorized to assess, company/vendor/client due diligence, and verifying where
-a public claim or account came from. Like other heavy work it goes to a worker
-agent with the `skills/osint` playbook, not into the captain's context; findings
-come back as facts with sources, and the task is tagged Research or Hacking.
+Jarvis runs open-source intelligence and relationship research for your own
+legitimate use: your or others' digital footprint, domains and infrastructure
+you own or are authorized to assess, company/vendor/client due diligence,
+verifying claims and accounts, and full dossiers on people you work with or
+have a real reason to research - identity, career, public presence,
+communication and working style, and how to engage them. It mines your own
+connected accounts (Telegram, email, WhatsApp, CRM) as first-class sources
+before going external. Like other heavy work it runs in a worker agent with the
+`skills/osint` playbook, not in the captain's context; findings come back as
+facts with sources, and dossiers are confidential - they stay in memory, never
+published.
 
-It works in phases (adapted from [smixs/osint-skill](https://github.com/smixs/osint-skill),
-minus its person-profiling parts): check available tools, a cheap parallel
-first pass, targeted extraction, cross-reference with A/B/C/D confidence grades,
-a capped recursive completeness check, then a sourced report. The scraping
-engine is Scrapling; keyless recon (whois, DNS, certificate transparency,
-Wayback, EXIF) needs no accounts, and paid search keys slot in via the env if
-you add them.
+It works in phases (adapted from [smixs/osint-skill](https://github.com/smixs/osint-skill)):
+check tools, a cheap parallel first pass, the owner's own accounts, targeted
+extraction, cross-reference with A/B/C/D confidence grades, a working-style
+profile, a capped recursive completeness check, then a sourced dossier. The
+scraping engine is Scrapling; keyless recon (whois, DNS, certificate
+transparency, Wayback, EXIF) needs no accounts; paid search keys slot in via
+the env if you add them.
 
-**Boundaries, enforced in the skill and the captain's prompt:** open sources
-and assets you own or are authorized to assess only; people only as public,
-professional due diligence with a stated reason; never profiling, locating or
-surveilling a private individual, reading private messages, or bypassing access
-controls. The captain declines those and asks you to restate the target and
-purpose when it is unclear.
+**The boundaries it keeps** (in the skill and the captain's prompt): open
+sources and your own data and assets only; a person dossier is for someone you
+deal with or have a real reason to research, never a stranger or an ex; never to
+surveil, locate, track or harass anyone, and never bypassing access controls.
+The captain declines those and asks you to state the relationship and purpose
+when it is unclear.
 
 Set it up once (builds the Scrapling venv, links the skill to `~/.claude/skills`
 so worker agents load it):
@@ -195,8 +201,36 @@ bash skills/osint/scripts/install-osint.sh
 bash skills/osint/scripts/diagnose.sh     # what's available
 ```
 
-Then just ask, e.g. "what's exposed about example.com" or "due diligence on
-this vendor". Turn web access on in Settings so the worker can search.
+Then ask, e.g. "what's exposed about example.com", "due diligence on this
+vendor", or "build a dossier on <client I'm meeting>". Turn web access on in
+Settings so the worker can search.
+
+## Multiple Claude accounts
+
+Yes, you can be logged into several Claude accounts at once without logging any
+of them out. Claude Code keeps each login in its own **config directory**
+(default `~/.claude` + `~/.claude.json`); `CLAUDE_CONFIG_DIR` points it at a
+different one. Each directory is an independent login.
+
+Add a second account:
+
+```sh
+CLAUDE_CONFIG_DIR=~/.claude-work claude    # then /login in it; ~/.claude is untouched
+```
+
+Give a Jarvis worker runtime its own account in `<data>/runtimes.json`, so the
+captain can delegate to it (and you spread rate limits across accounts):
+
+```json
+[
+  { "id": "claude-work", "label": "Claude (work)", "turnHook": "claude",
+    "command": "env CLAUDE_CONFIG_DIR=$HOME/.claude-work claude --permission-mode auto" }
+]
+```
+
+The captain keeps using the default `~/.claude`. For non-interactive auth
+instead of a login, `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` also work.
+In Docker, mount each extra config dir the same way `~/.claude` is mounted.
 
 ## Nightly sleep
 

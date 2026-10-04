@@ -81,7 +81,7 @@ if (process.argv[2] === 'ask') {
   process.exit(r.error ? 1 : 0)
 }
 
-console.log(dim(`jarvis - memory ${cfg.dbPath} - model ${cfg.model} - ${HELP}`))
+console.log(dim(`${cfg.name} - memory ${cfg.dbPath} - model ${cfg.model} - ${HELP}`))
 const rl = createInterface({ input: stdin, output: stdout, prompt: bold('you> ') })
 // The async iterator buffers lines typed or pasted while a turn is running; question() would drop them.
 try {
@@ -93,7 +93,7 @@ try {
       if (!(await command(line))) break
     } else if (line) {
       const r = await captain.handle(line)
-      console.log(`${bold('jarvis>')} ${r.text}\n${status(r)}`)
+      console.log(`${bold(`${cfg.name.toLowerCase()}>`)} ${r.text}\n${status(r)}`)
     }
     rl.prompt()
   }
