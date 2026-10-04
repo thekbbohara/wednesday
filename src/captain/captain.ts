@@ -1,9 +1,11 @@
 // The captain loop: the chat is the ledger, the LLM session is disposable.
 import { randomUUID } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Config } from '../config.ts'
-import { CLOSED_STATUSES, type Memory, type TaskStatus } from '../memory/store.ts'
+import { CLOSED_STATUSES, type LedgerEntry, type Memory, type TaskStatus } from '../memory/store.ts'
+import { withFileLock } from './lock.ts'
 import { plainDash } from '../text.ts'
 import { buildTurnPrompt, handoffPrompt, newView, type SessionView } from './prompt.ts'
 import type { Runner, TurnResult } from './runner.ts'
@@ -28,11 +30,18 @@ export class Captain {
   private mem: Memory
   private cfg: Config
   private runner: Runner
+  private lockPath: string
+  private chain: Promise<unknown> = Promise.resolve()
+  private pending: LedgerEntry[] = []
+  private draining = false
+  onStatus?: (s: { thinking: boolean }) => void
 
   constructor(mem: Memory, cfg: Config, runner: Runner) {
     this.mem = mem
     this.cfg = cfg
     this.runner = runner
+    mkdirSync(cfg.dataDir, { recursive: true })
+    this.lockPath = join(cfg.dataDir, 'captain.lock')
   }
 
   private systemPrompt(): string {
@@ -73,22 +82,80 @@ export class Captain {
     return this.runner.run({ sessionId, resume, message, systemPrompt: this.systemPrompt(), mcpServers: this.mcpServers(sessionId) })
   }
 
+  /** Owner message in, reply out (terminal: one message per turn). */
   async handle(text: string): Promise<Reply> {
-    const owner = this.mem.append('owner', text)
+    return this.respond([this.receive(text)])
+  }
+
+  /** Record an owner message in the ledger; it shows in the chat right away. */
+  receive(text: string): LedgerEntry {
+    return this.mem.append('owner', text)
+  }
+
+  /**
+   * Queue owner messages for the captain. Messages that arrive while a turn
+   * runs are answered together in the next turn, like a person catching up.
+   */
+  enqueue(...owners: LedgerEntry[]): void {
+    this.pending.push(...owners)
+    if (!this.draining) void this.drain()
+  }
+
+  /** Re-run a failed turn from its failure notice. */
+  retry(failureId: number): LedgerEntry[] {
+    const e = this.mem.ledgerGet(failureId)
+    const ids = (e?.meta?.reply_to as number[] | undefined) ?? []
+    if (!e || e.kind !== 'system' || !e.meta?.error || !ids.length) throw new Error(`L${failureId} is not a failed turn`)
+    const owners = ids.map((id) => this.mem.ledgerGet(id)).filter((o): o is LedgerEntry => o?.kind === 'owner')
+    this.enqueue(...owners)
+    return owners
+  }
+
+  get busy(): boolean {
+    return this.draining
+  }
+
+  private async drain(): Promise<void> {
+    this.draining = true
+    this.onStatus?.({ thinking: true })
+    try {
+      while (this.pending.length) {
+        const batch = this.pending.splice(0)
+        try {
+          await this.respond(batch)
+        } catch (e) {
+          // respond() ledgers its own failures; this only catches lock or bug errors.
+          this.failure(batch, e instanceof Error ? e.message : String(e), null)
+        }
+      }
+    } finally {
+      this.draining = false
+      this.onStatus?.({ thinking: false })
+    }
+  }
+
+  /** Run one captain turn answering these owner messages. */
+  respond(owners: LedgerEntry[]): Promise<Reply> {
+    const run = this.chain.then(() => withFileLock(this.lockPath, (this.cfg.turnTimeout + 120) * 1000, () => this.turn(owners)))
+    this.chain = run.catch(() => undefined)
+    return run
+  }
+
+  private async turn(owners: LedgerEntry[]): Promise<Reply> {
     let s = this.session()
-    let prompt = buildTurnPrompt(this.mem, this.cfg, owner, this.view, s.id)
+    let prompt = buildTurnPrompt(this.mem, this.cfg, owners, this.view, s.id)
     let res = await this.call(s.id, !s.fresh, prompt.text)
 
     if (res.isError && res.sessionMissing) {
       this.mem.append('system', `Captain session ${s.id} is gone (${res.text}); starting fresh`, { session: s.id })
       this.mem.sessionEnd(s.id, 'missing')
       s = this.session()
-      prompt = buildTurnPrompt(this.mem, this.cfg, owner, this.view, s.id)
+      prompt = buildTurnPrompt(this.mem, this.cfg, owners, this.view, s.id)
       res = await this.call(s.id, false, prompt.text)
     }
 
     if (res.isError) {
-      const e = this.mem.append('system', `Captain turn failed: ${res.text}`, { session: s.id, meta: { reply_to: owner.id } })
+      const e = this.failure(owners, res.text, s.id)
       // A session that never completed a turn does not exist on Claude Code's side.
       if (s.fresh) this.mem.sessionEnd(s.id, 'failed first turn')
       return { text: res.text, ledgerId: e.id, sessionId: s.id, contextTokens: 0, contextWindow: null, error: true }
@@ -97,17 +164,27 @@ export class Captain {
     res.text = plainDash(res.text)
     const reply = this.mem.append('captain', res.text, {
       session: s.id,
-      meta: { reply_to: owner.id, context_tokens: res.contextTokens, context_window: res.contextWindow, cost_usd: res.costUsd, recalled: prompt.injected },
+      meta: {
+        reply_to: owners.map((o) => o.id),
+        context_tokens: res.contextTokens,
+        context_window: res.contextWindow,
+        cost_usd: res.costUsd,
+        recalled: prompt.injected,
+      },
     })
     this.mem.sessionTurn(s.id, res.contextTokens, res.contextWindow)
 
     const out: Reply = { text: res.text, ledgerId: reply.id, sessionId: s.id, contextTokens: res.contextTokens, contextWindow: res.contextWindow }
-    const reason = this.rotationReason(s.id, owner.id, res)
+    const reason = this.rotationReason(s.id, owners[0].id, res)
     if (reason) {
-      await this.rotate(reason)
+      await this.rotateUnlocked(reason)
       out.rotated = reason
     }
     return out
+  }
+
+  private failure(owners: LedgerEntry[], reason: string, session: string | null): LedgerEntry {
+    return this.mem.append('system', `Captain turn failed: ${reason}`, { session, meta: { error: true, reply_to: owners.map((o) => o.id) } })
   }
 
   /** Why this session should end now, or null. */
@@ -129,7 +206,13 @@ export class Captain {
   }
 
   /** End the current session after letting it write its handoff into Now. */
-  async rotate(reason: string): Promise<void> {
+  rotate(reason: string): Promise<void> {
+    const run = this.chain.then(() => withFileLock(this.lockPath, (this.cfg.turnTimeout + 120) * 1000, () => this.rotateUnlocked(reason)))
+    this.chain = run.catch(() => undefined)
+    return run
+  }
+
+  private async rotateUnlocked(reason: string): Promise<void> {
     const cur = this.mem.sessionCurrent()
     if (!cur) return
     if (cur.turns > 0) {

@@ -135,11 +135,11 @@ describe('plain dash rule', () => {
   it('replaces em and en dashes everywhere memory is written', async () => {
     const { plainDash } = await import('../src/text.ts')
     expect(plainDash('Sunchadi — a tracker')).toBe('Sunchadi - a tracker')
-    expect(plainDash('yet—at least')).toBe('yet-at least')
+    expect(plainDash('yet—at least')).toBe('yet - at least')
     expect(plainDash('2024–2025')).toBe('2024-2025')
     const m = mk()
     expect(m.nowUpdate('a — b').text).toBe('a - b')
-    expect(m.factWrite({ kind: 'other', subject: 'x—y', body: 'p — q', source: 'owner' })).toMatchObject({ subject: 'x-y', body: 'p - q' })
+    expect(m.factWrite({ kind: 'other', subject: 'x—y', body: 'p — q', source: 'owner' })).toMatchObject({ subject: 'x - y', body: 'p - q' })
     expect(m.taskCreate({ title: 't — 1', goal: 'g' }).title).toBe('t - 1')
     expect(m.append('owner', 'hi — there').text).toBe('hi - there')
   })

@@ -10,19 +10,33 @@
     "jarvis": "src/cli.ts"
   },
   "scripts": {
+    "dev": "concurrently -k -n server,web \"node --watch --disable-warning=ExperimentalWarning src/server.ts\" \"vite\"",
+    "build": "vite build",
+    "start": "node --disable-warning=ExperimentalWarning src/server.ts",
     "chat": "node --disable-warning=ExperimentalWarning src/cli.ts",
     "mcp": "node --disable-warning=ExperimentalWarning src/mcp/server.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p web",
     "test": "NODE_OPTIONS=--disable-warning=ExperimentalWarning vitest run",
     "test:live": "JARVIS_LIVE=1 NODE_OPTIONS=--disable-warning=ExperimentalWarning vitest run test/live.test.ts --silent=false"
   },
   "dependencies": {
+    "@hono/node-server": "^2.1.3",
     "@modelcontextprotocol/sdk": "^1.32.0",
+    "hono": "^4.13.12",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^10.0.5",
     "typescript": "^7.0.2",
+    "vite": "^8.3.2",
     "vitest": "^5.0.3"
   }
 }

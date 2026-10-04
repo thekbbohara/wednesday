@@ -26,7 +26,10 @@ export interface BuiltPrompt {
   injected: string[]
 }
 
-export function buildTurnPrompt(mem: Memory, cfg: Config, owner: LedgerEntry, view: SessionView, sessionId: string): BuiltPrompt {
+export function buildTurnPrompt(mem: Memory, cfg: Config, owners: LedgerEntry[], view: SessionView, sessionId: string): BuiltPrompt {
+  if (!owners.length) throw new Error('a turn needs at least one owner message')
+  const owner = owners[0]
+  const query = owners.map((o) => o.text).join('\n')
   const parts: string[] = []
   const injected: string[] = []
   const fresh = !view.primed
@@ -54,8 +57,8 @@ export function buildTurnPrompt(mem: Memory, cfg: Config, owner: LedgerEntry, vi
   }
 
   const recalled: Hit[] = []
-  for (const h of mem.searchFacts(owner.text, cfg.recallFacts)) recalled.push(h)
-  for (const h of mem.searchLedger(owner.text, cfg.recallLedger, { beforeId: tailStart, kinds: RECALL_LEDGER_KINDS })) recalled.push(h)
+  for (const h of mem.searchFacts(query, cfg.recallFacts)) recalled.push(h)
+  for (const h of mem.searchLedger(query, cfg.recallLedger, { beforeId: tailStart, kinds: RECALL_LEDGER_KINDS })) recalled.push(h)
   const fresher = recalled.filter((h) => !view.seen.has(h.ref))
   if (fresher.length) {
     for (const h of fresher) {
@@ -69,9 +72,10 @@ export function buildTurnPrompt(mem: Memory, cfg: Config, owner: LedgerEntry, vi
     )
   }
 
-  view.seen.add(`L${owner.id}`)
+  for (const o of owners) view.seen.add(`L${o.id}`)
   const header = parts.length ? `<memory>\n${parts.join('\n\n')}\n</memory>\n\n` : ''
-  return { text: `${header}<owner_message id="L${owner.id}" at="${owner.ts}">\n${owner.text}\n</owner_message>`, injected }
+  const messages = owners.map((o) => `<owner_message id="L${o.id}" at="${o.ts}">\n${o.text}\n</owner_message>`).join('\n')
+  return { text: header + messages, injected }
 }
 
 export function handoffPrompt(reason: string): string {

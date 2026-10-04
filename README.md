@@ -4,8 +4,8 @@ One chat, forever. The owner talks to a single captain; the captain keeps its
 memory outside the LLM session, so the session can be thrown away and rebuilt
 at any time without losing anything. See `BRIEF.md` for the full intent.
 
-Status: **step 1 done** - memory, captain, session rotation, terminal chat.
-Not yet: chat UI (step 2), spawning agents (step 3), nightly sleep (step 4),
+Status: **steps 1-2 done** - memory, captain, session rotation, terminal
+chat, web chat. Not yet: spawning agents (step 3), nightly sleep (step 4),
 long-run eval (step 5).
 
 ## Run it
@@ -15,11 +15,38 @@ Needs Node 22.18+ (runs the TypeScript directly), pnpm, and a logged-in
 
 ```sh
 pnpm install
-pnpm chat                       # interactive chat
-./src/cli.ts ask "what are we doing?"   # one turn
+pnpm build                      # the web UI
+pnpm start                      # web chat on http://127.0.0.1:4788
+pnpm chat                       # or: terminal chat
+./src/cli.ts ask "what are we doing?"   # one turn from a script
 ```
 
-Chat commands: `/now`, `/tasks`, `/facts`, `/search <words>`,
+Web and terminal share the same memory and the same captain session, and can
+run at the same time: turns are serialized by a lock file in the data dir.
+
+Development (UI with hot reload on :5788, API on :4788):
+
+```sh
+pnpm dev
+# no tokens spent: a scripted captain, plus fake agents in the strip
+JARVIS_DATA_DIR=/tmp/jarvis-demo DEMO_AGENTS=1 node test/demo-server.ts
+```
+
+### Web chat
+
+One conversation and a strip of faces (see `DESIGN.md`). Jarvis's face shows
+when it is thinking or couldn't reply; agent faces arrive in step 3.
+
+- Messages sent while Jarvis is thinking are answered together in its next
+  turn. Replies land in order of time, like any messenger.
+- Ids like `F3`, `T1`, `L42` in replies are clickable: the popover shows the
+  record from memory, so every claim about the past can be checked.
+- Under each reply, a receipt line shows what Jarvis wrote to memory during
+  that turn ("saved F3 . created T1 . updated Now").
+- A failed turn shows the reason and a **Retry** button.
+- Scroll up to load older messages. Session rotation never shows.
+
+Terminal chat commands: `/now`, `/tasks`, `/facts`, `/search <words>`,
 `/get <F1|T1|L1>`, `/rotate`, `/sessions`, `/quit`. Each reply ends with its
 ledger id and how full the captain's context is.
 
@@ -27,14 +54,16 @@ ledger id and how full the captain's context is.
 
 ```sh
 cp .env.example .env            # set UID/GID to `id -u` / `id -g`
-docker compose run --rm jarvis
-docker compose run --rm jarvis ask "what are we doing?"
+docker compose up -d --build    # http://127.0.0.1:4788
+docker compose exec jarvis node src/cli.ts   # terminal chat in the container
 ```
 
 Memory lives in the `jarvis-data` volume. To keep it in a host folder,
 `mkdir -p data` first (Docker would create it as root) and set
 `JARVIS_DATA=./data`. Your Claude login is mounted from `~/.claude` and
-`~/.claude.json`.
+`~/.claude.json`. It listens on 127.0.0.1 only; before binding another address
+(`JARVIS_BIND`, e.g. a Tailscale IP) set `JARVIS_TOKEN` and open
+`/?token=<JARVIS_TOKEN>` once to sign in.
 
 ## Configuration
 
@@ -53,6 +82,8 @@ Memory lives in the `jarvis-data` volume. To keep it in a host folder,
 | `JARVIS_PROMPT_FILE`      | `prompts/captain.md` | Captain system prompt. |
 | `JARVIS_TURN_TIMEOUT`     | `600`              | Seconds before a turn is abandoned. |
 | `JARVIS_CLAUDE_BIN`       | `claude`           | Claude Code binary. |
+| `HOST` / `PORT`           | `127.0.0.1` / `4788` | Web server address. |
+| `JARVIS_TOKEN`            | none               | Shared secret for the web chat (cookie via `/?token=`, or `Authorization: Bearer`). |
 
 ## How it works
 
@@ -126,7 +157,8 @@ whether to add embeddings (sqlite-vec).
 ## Tests
 
 ```sh
-pnpm test          # memory, retrieval quality, MCP over stdio, captain loop (fake runner)
+pnpm test          # memory, retrieval quality, MCP over stdio, captain loop and
+                   # web API (scripted runners), chat layout
 pnpm test:live     # real claude (haiku): rotate, then a fresh session must answer
                    # "what are we doing and why" from memory alone (tail disabled),
                    # and must say "I don't have that" for an unknown fact
@@ -144,11 +176,16 @@ its own.
 
 ```
 src/cli.ts               terminal chat
+src/server.ts            web server: chat API, live events (SSE), serves the UI
+src/web/chat.ts          ledger -> chat items, citation lookups
 src/config.ts            env config
 src/memory/store.ts      SQLite memory: ledger, facts, tasks, now, sessions
 src/mcp/server.ts        memory tools for the captain (MCP, stdio)
-src/captain/captain.ts   turn loop, rotation
+src/captain/captain.ts   turn loop, batching, rotation
+src/captain/lock.ts      cross-process turn lock
 src/captain/prompt.ts    what the captain sees each turn
 src/captain/runner.ts    one headless claude call
 prompts/captain.md       captain system prompt
+web/                     React UI (DESIGN.md); Face.tsx is shared with agent-hq
+test/demo-server.ts      scripted server for UI work
 ```
