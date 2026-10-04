@@ -5,8 +5,9 @@ import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { plainDash } from '../text.ts'
+import { EXP_RULES, levelFor, OVERALL_SCALE } from '../skills/levels.ts'
 
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 export const LEDGER_KINDS = ['owner', 'captain', 'decision', 'agent', 'task', 'fact', 'now', 'system', 'rotation', 'digest'] as const
 export type LedgerKind = (typeof LEDGER_KINDS)[number]
@@ -20,7 +21,8 @@ export const CLOSED_STATUSES: readonly TaskStatus[] = ['done', 'cancelled']
 
 export interface LedgerEntry { id: number; ts: string; kind: LedgerKind; session: string | null; text: string; meta: Record<string, unknown> | null }
 export interface Fact { id: number; kind: FactKind; subject: string; body: string; source: string; created_at: string; updated_at: string; stale: boolean; superseded_by: number | null }
-export interface Task { id: number; title: string; goal: string; plan: string; status: TaskStatus; result: string; created_at: string; updated_at: string }
+export interface Task { id: number; title: string; goal: string; plan: string; status: TaskStatus; result: string; skill: string | null; created_at: string; updated_at: string }
+export interface ExpEvent { id: number; ts: string; skill: string; amount: number; reason: string; ref: string | null }
 export interface Now { text: string; version: number; updated_at: string }
 export interface Session { id: string; started_at: string; ended_at: string | null; end_reason: string | null; turns: number; peak_tokens: number; context_window: number | null }
 
@@ -138,6 +140,20 @@ CREATE TABLE sessions(
 
 /** Schema changes after v1, applied in order by `node src/migrate.ts` (never implicitly). */
 export const MIGRATIONS: Record<number, string> = {
+  3: `
+ALTER TABLE tasks ADD COLUMN skill TEXT;
+CREATE TABLE exp(
+  id INTEGER PRIMARY KEY,
+  ts TEXT NOT NULL,
+  skill TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  ref TEXT
+);
+CREATE INDEX exp_skill ON exp(skill, id);
+CREATE TRIGGER exp_no_update BEFORE UPDATE ON exp BEGIN SELECT RAISE(ABORT, 'exp is append-only'); END;
+CREATE TRIGGER exp_no_delete BEFORE DELETE ON exp BEGIN SELECT RAISE(ABORT, 'exp is append-only'); END;
+`,
   2: `
 CREATE TABLE agents(
   id TEXT PRIMARY KEY,
@@ -328,37 +344,76 @@ export class Memory {
 
   // ---- tasks --------------------------------------------------------------
 
-  taskCreate(input: { title: string; goal: string; plan?: string; status?: TaskStatus }, session?: string | null): Task {
+  taskCreate(input: { title: string; goal: string; plan?: string; status?: TaskStatus; skill?: string | null }, session?: string | null): Task {
     const ts = this.ts()
     input = { ...input, title: plainDash(input.title), goal: plainDash(input.goal), plan: input.plan && plainDash(input.plan) }
     const status = input.status ?? 'open'
+    const skill = input.skill || null
     const r = this.db
-      .prepare('INSERT INTO tasks(title, goal, plan, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(input.title, input.goal, input.plan ?? '', status, ts, ts)
+      .prepare('INSERT INTO tasks(title, goal, plan, status, skill, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(input.title, input.goal, input.plan ?? '', status, skill, ts, ts)
     const id = Number(r.lastInsertRowid)
-    this.append('task', `T${id} created [${status}] ${input.title}. Goal: ${input.goal}${input.plan ? `. Plan: ${input.plan}` : ''}`, {
+    this.append('task', `T${id} created [${status}]${skill ? ` (${skill})` : ''} ${input.title}. Goal: ${input.goal}${input.plan ? `. Plan: ${input.plan}` : ''}`, {
       session,
-      meta: { task: id, status },
+      meta: { task: id, status, skill },
     })
+    if (skill) this.expAward(skill, EXP_RULES.created, `created T${id} ${input.title}`, `T${id}`, session)
+    if (skill && status === 'done') this.awardFinished(this.taskGet(id)!, session)
     return this.taskGet(id)!
   }
 
-  taskUpdate(id: number, patch: { title?: string; goal?: string; plan?: string; status?: TaskStatus; result?: string }, session?: string | null): Task {
+  taskUpdate(id: number, patch: { title?: string; goal?: string; plan?: string; status?: TaskStatus; result?: string; skill?: string }, session?: string | null): Task {
     const cur = this.taskGet(id)
     if (!cur) throw new Error(`no such task T${id}`)
     patch = Object.fromEntries(Object.entries(patch).map(([k, v]) => [k, typeof v === 'string' && k !== 'status' ? plainDash(v) : v]))
     const next = { ...cur, ...Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)) } as Task
     this.db
-      .prepare('UPDATE tasks SET title = ?, goal = ?, plan = ?, status = ?, result = ?, updated_at = ? WHERE id = ?')
-      .run(next.title, next.goal, next.plan, next.status, next.result, this.ts(), id)
+      .prepare('UPDATE tasks SET title = ?, goal = ?, plan = ?, status = ?, result = ?, skill = ?, updated_at = ? WHERE id = ?')
+      .run(next.title, next.goal, next.plan, next.status, next.result, next.skill ?? null, this.ts(), id)
     const changes = Object.entries(patch)
       .filter(([k, v]) => v !== undefined && v !== (cur as unknown as Row)[k])
       .map(([k, v]) => `${k}: ${v}`)
     this.append('task', `T${id} updated (${next.title}) ${changes.join('; ') || 'no changes'}`, {
       session,
-      meta: { task: id, status: next.status, from: cur.status },
+      meta: { task: id, status: next.status, from: cur.status, skill: next.skill ?? null },
     })
+    if (next.status === 'done' && cur.status !== 'done' && next.skill) this.awardFinished(this.taskGet(id)!, session)
     return this.taskGet(id)!
+  }
+
+  // ---- skills and EXP ------------------------------------------------------
+
+  /** Finishing a task pays once, however often it is reopened; more when an agent did the work. */
+  private awardFinished(t: Task, session?: string | null): void {
+    if (!t.skill) return
+    const paid = this.db.prepare("SELECT 1 FROM exp WHERE ref = ? AND reason LIKE 'finished %'").get(`T${t.id}`)
+    if (paid) return
+    this.expAward(t.skill, EXP_RULES.finished, `finished T${t.id} ${t.title}`, `T${t.id}`, session)
+    const agent = this.db.prepare('SELECT id FROM agents WHERE task_id = ? LIMIT 1').get(t.id) as { id: string } | undefined
+    if (agent) this.expAward(t.skill, EXP_RULES.delegated, `delegated T${t.id} to ${agent.id}`, `T${t.id}`, session)
+  }
+
+  /** Appends EXP; a level-up (of the skill or of Jarvis overall) is written to the ledger. */
+  expAward(skill: string, amount: number, reason: string, ref: string | null, session?: string | null): ExpEvent {
+    const before = this.expBySkill()
+    const totalBefore = [...before.values()].reduce((a, b) => a + b, 0)
+    const r = this.db.prepare('INSERT INTO exp(ts, skill, amount, reason, ref) VALUES (?, ?, ?, ?, ?)').run(this.ts(), skill, amount, reason, ref)
+    const was = levelFor(before.get(skill) ?? 0)
+    const now = levelFor((before.get(skill) ?? 0) + amount)
+    if (now > was) this.append('system', `${skill} reached level ${now}`, { session, meta: { levelup: { skill, level: now } } })
+    const overallWas = levelFor(totalBefore / OVERALL_SCALE)
+    const overallNow = levelFor((totalBefore + amount) / OVERALL_SCALE)
+    if (overallNow > overallWas) this.append('system', `Jarvis reached level ${overallNow}`, { session, meta: { levelup: { skill: 'jarvis', level: overallNow } } })
+    return this.db.prepare('SELECT * FROM exp WHERE id = ?').get(Number(r.lastInsertRowid)) as unknown as ExpEvent
+  }
+
+  expBySkill(): Map<string, number> {
+    const rows = this.db.prepare('SELECT skill, sum(amount) AS total FROM exp GROUP BY skill').all() as { skill: string; total: number }[]
+    return new Map(rows.map((r) => [r.skill, Number(r.total)]))
+  }
+
+  expEvents(skill: string, limit = 8): ExpEvent[] {
+    return this.db.prepare('SELECT * FROM exp WHERE skill = ? ORDER BY id DESC LIMIT ?').all(skill, limit) as unknown as ExpEvent[]
   }
 
   taskGet(id: number): Task | null {

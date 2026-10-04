@@ -59,9 +59,13 @@ describe('jarvis MCP server', () => {
 
   it('writes and finds facts, tasks, decisions; stamps the session', async () => {
     expect(text(await call('memory_write', { kind: 'owner', subject: 'owner city', body: 'Kathmandu', source: 'owner' }))).toBe('Saved F1.')
-    expect(text(await call('task_create', { title: 'Build memory', goal: 'captain survives rotation' }))).toBe('Created T1.')
+    expect(text(await call('task_create', { title: 'Build memory', goal: 'captain survives rotation', skill: 'coding' }))).toBe('Created T1 (coding).')
+    expect((await call('task_create', { title: 'x', goal: 'y', skill: 'juggling' })).isError).toBe(true)
     expect(text(await call('log_decision', { decision: 'Use SQLite FTS5', reason: 'one file, no servers' }))).toMatch(/^Logged L\d+\.$/)
     expect(text(await call('task_update', { id: 1, status: 'done', result: 'shipped' }))).toBe('T1 is done.')
+    const m = new Memory(db)
+    expect(m.expBySkill().get('coding')).toBe(35)
+    m.close()
 
     const found = text(await call('memory_search', { query: 'sqlite' }))
     expect(found).toMatch(/L\d+ .*decision: Decision: Use SQLite FTS5/)

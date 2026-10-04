@@ -5,6 +5,7 @@ type Message = Extract<ChatItem, { type: "owner" | "captain" }>;
 type ErrorItem = Extract<ChatItem, { type: "error" }>;
 type AgentItem = Extract<ChatItem, { type: "agent" }>;
 type DigestItem = Extract<ChatItem, { type: "digest" }>;
+type LevelItem = Extract<ChatItem, { type: "levelup" }>;
 
 export type Row =
   | { kind: "day"; key: string; label: string }
@@ -13,7 +14,8 @@ export type Row =
   | { kind: "receipts"; key: string; receipts: Receipt[] }
   | { kind: "error"; key: string; item: ErrorItem; retryable: boolean }
   | { kind: "agent"; key: string; item: AgentItem }
-  | { kind: "digest"; key: string; item: DigestItem };
+  | { kind: "digest"; key: string; item: DigestItem }
+  | { kind: "levelup"; key: string; item: LevelItem };
 
 export function dayLabel(d: Date, now = new Date()): string {
   const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
@@ -78,6 +80,11 @@ export function buildRows(items: ChatItem[], now = new Date()): { rows: Row[]; t
         flush();
         rows.push({ kind: "owner", key: `m${item.id}`, item, first: lastSide !== "owner" });
         lastSide = "owner";
+        break;
+      case "levelup":
+        // A level-up lands mid-turn; receipts keep waiting for the reply.
+        rows.push({ kind: "levelup", key: `u${item.id}`, item });
+        lastSide = null;
         break;
       case "digest":
         flush();

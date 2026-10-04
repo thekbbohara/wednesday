@@ -30,9 +30,10 @@ export interface Runner {
 
 export interface ClaudeRunnerOptions {
   bin: string
-  model: string
+  /** A value, or a getter so settings changed at runtime apply to the next turn. */
+  model: string | (() => string)
   cwd: string
-  allowedTools: string[]
+  allowedTools: string[] | (() => string[])
   timeoutSec: number
 }
 
@@ -44,18 +45,20 @@ export class ClaudeRunner implements Runner {
   }
 
   run(req: TurnRequest): Promise<TurnResult> {
-    const builtins = [...new Set(this.opts.allowedTools.map((t) => t.replace(/\(.*$/, '')))]
+    const model = typeof this.opts.model === 'function' ? this.opts.model() : this.opts.model
+    const allowed = typeof this.opts.allowedTools === 'function' ? this.opts.allowedTools() : this.opts.allowedTools
+    const builtins = [...new Set(allowed.map((t) => t.replace(/\(.*$/, '')))]
     const args = [
       '-p',
       '--output-format', 'json',
-      '--model', this.opts.model,
+      '--model', model,
       // The captain's context is ours alone: no user/project CLAUDE.md, hooks or plugins.
       '--setting-sources', '',
       '--strict-mcp-config',
       '--mcp-config', JSON.stringify({ mcpServers: req.mcpServers }),
       '--system-prompt', req.systemPrompt,
       '--tools', builtins.length ? builtins.join(',') : '',
-      '--allowedTools', [...Object.keys(req.mcpServers).map((s) => `mcp__${s}`), ...this.opts.allowedTools].join(','),
+      '--allowedTools', [...Object.keys(req.mcpServers).map((s) => `mcp__${s}`), ...allowed].join(','),
       ...(req.resume ? ['--resume', req.sessionId] : ['--session-id', req.sessionId]),
     ]
     return new Promise((resolve) => {

@@ -227,3 +227,49 @@ describe('static files', () => {
     close()
   })
 })
+
+describe('pages', () => {
+  it('lists tasks, skills and memory, and searches memory', async () => {
+    const { mem, app, close } = setup()
+    const t = mem.taskCreate({ title: 'Fix login', goal: 'users log in', skill: 'coding' })
+    mem.taskUpdate(t.id, { status: 'done', result: 'fixed' })
+    mem.taskCreate({ title: 'Ask client', goal: 'g', status: 'waiting_owner' })
+    const said = mem.append('owner', 'We host on Hetzner')
+    const old = mem.factWrite({ kind: 'decision', subject: 'hosting', body: 'Hetzner', source: `L${said.id}` })
+    mem.factWrite({ kind: 'decision', subject: 'hosting', body: 'DigitalOcean', source: 'owner', supersedes: [old.id] })
+    mem.nowUpdate('Goal: ship')
+
+    const tasks = (await json(app.request('/api/tasks'))).tasks
+    expect(tasks.map((x: { title: string; skill: string | null; agent: unknown }) => [x.title, x.skill, x.agent])).toEqual([
+      ['Ask client', null, null],
+      ['Fix login', 'coding', null],
+    ])
+    const skills = (await json(app.request('/api/skills'))).skills
+    expect(skills.find((x: { id: string }) => x.id === 'coding')).toMatchObject({ exp: 35, level: 1, recent: [{ amount: 30 }, { amount: 5 }] })
+    const memory = await json(app.request('/api/memory'))
+    expect(memory.now.text).toBe('Goal: ship')
+    expect(memory.facts.map((f: { body: string; stale: boolean }) => [f.body, f.stale])).toEqual([
+      ['DigitalOcean', false],
+      ['Hetzner', true],
+    ])
+    const found = await json(app.request('/api/memory?q=Hetzner'))
+    expect(found.hits.find((h: { ref: string }) => h.ref === `L${said.id}`).outdated).toMatch(/replaced by/)
+    expect((await json(app.request('/api/chat?limit=1'))).status.waiting).toBe(1)
+    close()
+  })
+
+  it('validates settings and applies them to the next captain turn', async () => {
+    const { app, runner, captain, close } = setup()
+    const put = (body: unknown) => app.request('/api/settings', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+    expect((await json(app.request('/api/settings'))).settings).toMatchObject({ web: false, sleepAt: '04:00' })
+    const bad = await put({ rotateAt: 2, maxTurns: 1, sleepAt: '25:00', model: 'Not A Model!' })
+    expect(bad.status).toBe(400)
+    expect(Object.keys((await json(bad)).errors).sort()).toEqual(['maxTurns', 'model', 'rotateAt', 'sleepAt'])
+    expect((await json(await put({ web: true, maxTurns: 12, sleepAt: '' }))).settings).toMatchObject({ web: true, maxTurns: 12, sleepAt: '' })
+    expect((captain as unknown as { cfg: { allowedTools: string[]; maxTurns: number } }).cfg.allowedTools).toEqual(expect.arrayContaining(['WebSearch', 'WebFetch']))
+    expect((captain as unknown as { cfg: { maxTurns: number } }).cfg.maxTurns).toBe(12)
+    expect((await json(await put({ web: false }))).settings.web).toBe(false)
+    expect(runner.calls).toHaveLength(0)
+    close()
+  })
+})

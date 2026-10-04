@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { api, mergeItems, RUNTIME_COLOR, type Agent, type AgentDetail, type ChatItem, type RefInfo, type Status } from "./api";
+import { api, mergeItems, RUNTIME_COLOR, type Agent, type AgentDetail, type ChatItem, type RefInfo, type SkillView, type Status } from "./api";
+import { ExpBar, SkillBody, SkillIcon } from "./Skills";
+import { Cited } from "./Cited";
+import { Nav, usePage } from "./Nav";
+import { MemoryPage, PageHead, SettingsPage, SkillsPage, TasksPage } from "./pages";
 import { Face, type Mood } from "./Face";
 import { buildRows, fullTime, splitCitations, type Row } from "./thread";
 
@@ -14,7 +18,13 @@ type Receipt = Extract<ChatItem, { type: "receipt" }>;
 export function App() {
   const [items, setItems] = useState<ChatItem[]>([]);
   const [hasMore, setHasMore] = useState(false);
-  const [status, setStatus] = useState<Status>({ thinking: false, agents: [], model: "", lastReplyAt: null });
+  const [status, setStatus] = useState<Status>({ thinking: false, agents: [], model: "", lastReplyAt: null, jarvis: { level: 1, exp: 0, floor: 0, next: 300 }, skills: [], waiting: 0 });
+  const [page, goPage] = usePage();
+  // Bumps on every ledger change, so open pages refresh themselves.
+  const [version, setVersion] = useState(0);
+  const [unread, setUnread] = useState(false);
+  const pageRef = useRef(page);
+  pageRef.current = page;
   const [online, setOnline] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [popover, setPopover] = useState<PopoverTarget | null>(null);
@@ -45,7 +55,12 @@ export function App() {
     void load();
     const connect = () => {
       es = new EventSource("/api/events");
-      es.addEventListener("items", (e) => setItems((cur) => mergeItems(cur, JSON.parse((e as MessageEvent).data))));
+      es.addEventListener("items", (e) => {
+        const fresh = JSON.parse((e as MessageEvent).data) as ChatItem[];
+        setItems((cur) => mergeItems(cur, fresh));
+        setVersion((v) => v + 1);
+        if (pageRef.current !== "command" && fresh.some((i) => i.type === "captain")) setUnread(true);
+      });
       es.addEventListener("status", (e) => setStatus(JSON.parse((e as MessageEvent).data)));
       es.onopen = () => {
         setOnline((was) => {
@@ -143,6 +158,20 @@ export function App() {
     setPopover((p) => (p?.kind === "agent" && p.id === id ? null : { kind: "agent", id, x: r.right, y: r.bottom, alignEnd: true }));
   };
 
+  const openSkill = (id: string, e: MouseEvent<HTMLElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const r = e.currentTarget.getBoundingClientRect();
+    const rail = e.currentTarget.closest(".rail")?.getBoundingClientRect() ?? r;
+    const narrow = matchMedia("(max-width: 1099px)").matches;
+    // Beside the rail on desktop, under it when the rail is a row.
+    setPopover((p) =>
+      p?.kind === "skill" && p.id === id ? null : narrow ? { kind: "skill", id, x: r.left, y: rail.bottom } : { kind: "skill", id, x: rail.right + 12, y: r.top - 8 },
+    );
+  };
+
+  const skillMap = useMemo(() => new Map(status.skills.map((s) => [s.id, s])), [status.skills]);
+
   const colors = useMemo(() => new Map(status.agents.map((a) => [a.id, RUNTIME_COLOR[a.runtime] ?? OTHER_COLOR])), [status.agents]);
 
   const closePopover = useCallback(() => setPopover(null), []);
@@ -155,120 +184,209 @@ export function App() {
 
   return (
     <div className="app">
-      <Hero mood={mood} stateText={stateText} status={status} onAgent={openAgent} />
+      <Nav
+        page={page}
+        onPage={(p) => {
+          if (p === "command") setUnread(false);
+          goPage(p);
+        }}
+        waiting={status.waiting}
+        unread={unread}
+      />
+      <div className="main">
+        <section className="top">
+          <Portrait mood={mood} stateText={stateText} status={status} />
+          <Roster agents={status.agents} onAgent={openAgent} />
+        </section>
 
-      <main className="thread" ref={scroller} onScroll={onScroll}>
-        <div className="thread__inner">
-          {hasMore && <div className="thread__more">Loading earlier messages</div>}
-          {loaded && !items.length && <Empty />}
-          {rows.map((row) => (
-            <RowView key={row.key} row={row} onRef={openRef} colors={colors} />
-          ))}
-          {status.thinking && <Pending receipts={trailing} onRef={openRef} />}
-          {!status.thinking && trailing.length > 0 && <Receipts receipts={trailing} onRef={openRef} />}
-        </div>
-      </main>
+        <section className="page">
+          {/* The chat stays mounted on other pages, so its scroll and draft survive. */}
+          <div className="page__view" hidden={page !== "command"}>
+            <PageHead title="Command Center" />
+            <div className="thread" ref={scroller} onScroll={onScroll}>
+              <div className="thread__inner">
+                {hasMore && <div className="thread__more">Loading earlier messages</div>}
+                {loaded && !items.length && <Empty />}
+                {rows.map((row) => (
+                  <RowView key={row.key} row={row} onRef={openRef} colors={colors} skills={skillMap} onSkills={() => goPage("skills")} />
+                ))}
+                {status.thinking && <Pending receipts={trailing} onRef={openRef} />}
+                {!status.thinking && trailing.length > 0 && <Receipts receipts={trailing} onRef={openRef} />}
+              </div>
+            </div>
 
-      <footer className="dock">
-        {unseen && (
-          <button className="dock__new" onClick={toBottom}>
-            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden>
-              <path d="M12 5v14M5.5 12.5 12 19l6.5-6.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            New messages
-          </button>
-        )}
-        <Composer onSend={send} />
-      </footer>
+            <footer className="dock">
+              {unseen && (
+                <button className="dock__new" onClick={toBottom}>
+                  <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden>
+                    <path d="M12 5v14M5.5 12.5 12 19l6.5-6.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  New messages
+                </button>
+              )}
+              <Composer onSend={send} />
+            </footer>
+          </div>
+          {page === "skills" && (
+            <div className="page__view">
+              <SkillsPage version={version} onSkill={openSkill} onRef={openRef} />
+            </div>
+          )}
+          {page === "tasks" && (
+            <div className="page__view">
+              <TasksPage version={version} skills={skillMap} onRef={openRef} />
+            </div>
+          )}
+          {page === "memory" && (
+            <div className="page__view">
+              <MemoryPage version={version} onRef={openRef} />
+            </div>
+          )}
+          {page === "settings" && (
+            <div className="page__view">
+              <SettingsPage />
+            </div>
+          )}
+        </section>
+      </div>
 
       {popover && (
-        <Popover x={popover.x} y={popover.y} alignEnd={popover.kind === "agent"} label={popover.kind === "ref" ? popover.ref : popover.id} onClose={closePopover}>
-          {popover.kind === "ref" ? <RefBody target={popover.ref} onRef={openRef} /> : <AgentBody id={popover.id} onRef={openRef} />}
+        <Popover
+          x={popover.x}
+          y={popover.y}
+          alignEnd={popover.kind === "agent"}
+          label={popover.kind === "ref" ? popover.ref : popover.id}
+          onClose={closePopover}
+        >
+          {popover.kind === "ref" ? (
+            <RefBody target={popover.ref} onRef={openRef} />
+          ) : popover.kind === "agent" ? (
+            <AgentBody id={popover.id} onRef={openRef} />
+          ) : (
+            <SkillBody id={popover.id} onRef={openRef} />
+          )}
         </Popover>
       )}
     </div>
   );
 }
 
-type PopoverTarget = { kind: "ref"; ref: string; x: number; y: number } | { kind: "agent"; id: string; x: number; y: number; alignEnd: true };
+type PopoverTarget =
+  | { kind: "ref"; ref: string; x: number; y: number }
+  | { kind: "agent"; id: string; x: number; y: number; alignEnd: true }
+  | { kind: "skill"; id: string; x: number; y: number };
 
 const OTHER_COLOR = "#8fb3c9";
 
-/** agent-hq's hero card: who Jarvis is, what it is doing, and its crew. */
-function Hero({ mood, stateText, status, onAgent }: { mood: Mood; stateText: string; status: Status; onAgent: OnAgent }) {
+/** Jarvis's portrait: face, level and EXP, state. */
+function Portrait({ mood, stateText, status }: { mood: Mood; stateText: string; status: Status }) {
   const narrow = useNarrow();
   const now = useNow(30_000);
+  const j = status.jarvis;
   return (
-    <header className="hero">
-      <div className="hero__card">
-        <div className="hero__me">
-          <Face id="jarvis" mood={mood} color={JARVIS_COLOR} size={narrow ? 44 : 64} badge={false} />
-          <div className="hero__info">
-            <h1 className="hero__name">Jarvis</h1>
-            <div className="hero__meta">
-              <span className="tag">captain</span>
-              {status.model && <span className="tag">{status.model}</span>}
-              <span className={`pill pill--${mood}`} aria-live="polite">
-                <i />
-                {stateText}
-              </span>
-              {status.lastReplyAt && <span className="hero__active">Active {ago(status.lastReplyAt, now)}</span>}
-            </div>
-          </div>
+    <div className="portrait">
+      {status.model && <span className="portrait__model">{status.model}</span>}
+      <Face id="jarvis" mood={mood} color={JARVIS_COLOR} size={narrow ? 52 : 96} badge={false} />
+      <div className="portrait__info">
+        <h1 className="portrait__name">
+          Jarvis <span className="lv">Lv {j.level}</span>
+        </h1>
+        <ExpBar p={j} color="var(--blue)" />
+        <p className="portrait__exp">
+          {j.exp.toLocaleString("en-US")} / {j.next.toLocaleString("en-US")} exp
+        </p>
+        <div className="portrait__state">
+          <span className={`pill pill--${mood}`} aria-live="polite">
+            <i />
+            {stateText}
+          </span>
+          {status.lastReplyAt && <span className="portrait__active">Active {ago(status.lastReplyAt, now)}</span>}
         </div>
-        <Crew agents={status.agents} onAgent={onAgent} size={narrow ? 28 : 32} />
       </div>
-    </header>
+    </div>
   );
 }
 
-function Crew({ agents, onAgent, size }: { agents: Agent[]; onAgent: OnAgent; size: number }) {
-  // The tooltip is fixed-positioned so the scrolling row cannot clip it.
-  const [tip, setTip] = useState<{ id: string; right: number; top: number } | null>(null);
+const TILE = 72;
+const GAP = 12;
+
+/** agent-hq's roster: the crew's faces, padded with empty slots to two full rows. */
+function Roster({ agents, onAgent }: { agents: Agent[]; onAgent: OnAgent }) {
+  const narrow = useNarrow();
+  const grid = useRef<HTMLDivElement>(null);
+  const [columns, setColumns] = useState(7);
+  const [tip, setTip] = useState<{ id: string; left: number; top: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = grid.current;
+    if (!el) return;
+    const measure = () => setColumns(Math.max(1, Math.floor((el.clientWidth + GAP) / (TILE + GAP))));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const count = (m: Mood) => agents.filter((a) => a.state === m).length;
+  // Phones show the crew as one scrolling row, without empty slots.
+  const slots = narrow ? 0 : Math.max(columns * 2, Math.ceil((agents.length + 1) / columns) * columns) - agents.length;
   const show = (id: string) => (e: { currentTarget: HTMLElement }) => {
     const r = e.currentTarget.getBoundingClientRect();
-    setTip({ id, right: Math.max(8, innerWidth - r.right), top: r.bottom + 8 });
+    setTip({ id, left: r.left + r.width / 2, top: r.bottom + 6 });
   };
   const live = tip && agents.find((a) => a.id === tip.id);
-  if (!agents.length) return <p className="crew crew--empty">No agents yet</p>;
   return (
-    <div className="crew">
-      <ul className="crew__faces" aria-label="Agents" onScroll={() => setTip(null)}>
+    <div className="roster">
+      <header className="roster__head">
+        <h2 className="roster__title">Crew</h2>
+        <p className="roster__stats">
+          {agents.length} {agents.length === 1 ? "agent" : "agents"}
+          <i>·</i>
+          <b className="c-mint">{count("working")}</b> working
+          <i>·</i>
+          <b className="c-amber">{count("needs")}</b> {count("needs") === 1 ? "needs" : "need"} you
+          {count("error") > 0 && (
+            <>
+              <i>·</i>
+              <b className="c-coral">{count("error")}</b> errored
+            </>
+          )}
+        </p>
+      </header>
+      {narrow && !agents.length ? null : (
+      <div className="roster__grid" ref={grid} role="list" aria-label="Agents" onScroll={() => setTip(null)}>
         {agents.map((a) => (
-          <li key={a.id}>
-            <button
-              className="crew__face"
-              aria-label={`${a.name}, ${MOOD_LABEL[a.state]}`}
-              onClick={(e) => {
-                setTip(null);
-                onAgent(a.id, e);
-              }}
-              onMouseEnter={show(a.id)}
-              onMouseLeave={() => setTip(null)}
-              onFocus={show(a.id)}
-              onBlur={() => setTip(null)}
-            >
-              <Face id={a.id} mood={a.state} color={RUNTIME_COLOR[a.runtime] ?? OTHER_COLOR} size={size} />
-            </button>
-          </li>
+          <button
+            key={a.id}
+            role="listitem"
+            className="tile"
+            aria-label={`${a.name}, ${MOOD_LABEL[a.state]}`}
+            onClick={(e) => {
+              setTip(null);
+              onAgent(a.id, e);
+            }}
+            onMouseEnter={show(a.id)}
+            onMouseLeave={() => setTip(null)}
+            onFocus={show(a.id)}
+            onBlur={() => setTip(null)}
+          >
+            <Face id={a.id} mood={a.state} color={RUNTIME_COLOR[a.runtime] ?? OTHER_COLOR} size={narrow ? 44 : 60} />
+            <span className="tile__name">{a.name}</span>
+          </button>
         ))}
-      </ul>
-      <p className="crew__stats">
-        {agents.length} {agents.length === 1 ? "agent" : "agents"}
-        <i>·</i>
-        <b className="c-mint">{count("working")}</b> working
-        <i>·</i>
-        <b className="c-amber">{count("needs")}</b> {count("needs") === 1 ? "needs" : "need"} you
-        {count("error") > 0 && (
-          <>
-            <i>·</i>
-            <b className="c-coral">{count("error")}</b> errored
-          </>
-        )}
-      </p>
+        {Array.from({ length: slots }, (_, i) => (
+          <button
+            key={`slot-${i}`}
+            className="tile tile--empty"
+            aria-label="Start an agent"
+            title="Start an agent"
+            onClick={() => dispatchEvent(new CustomEvent("jarvis:prefill", { detail: "Start an agent to " }))}
+          >
+            <span className="tile__slot" />
+          </button>
+        ))}
+      </div>
+      )}
       {live && (
-        <span className="tip" role="tooltip" style={{ right: tip.right, top: tip.top }}>
+        <span className="tip tip--below" role="tooltip" style={{ left: tip.left, top: tip.top }}>
           {live.name} <span className="tip__state">{MOOD_LABEL[live.state]}</span>
         </span>
       )}
@@ -320,7 +438,19 @@ function Empty() {
 type OnRef = (ref: string, e: MouseEvent<HTMLElement>) => void;
 type OnAgent = (id: string, e: MouseEvent<HTMLElement>) => void;
 
-function RowView({ row, onRef, colors }: { row: Row; onRef: OnRef; colors: Map<string, string> }) {
+function RowView({
+  row,
+  onRef,
+  colors,
+  skills,
+  onSkills,
+}: {
+  row: Row;
+  onRef: OnRef;
+  colors: Map<string, string>;
+  skills: Map<string, SkillView>;
+  onSkills: () => void;
+}) {
   switch (row.kind) {
     case "day":
       return (
@@ -359,6 +489,25 @@ function RowView({ row, onRef, colors }: { row: Row; onRef: OnRef; colors: Map<s
       );
     case "error":
       return <ErrorNotice item={row.item} retryable={row.retryable} />;
+    case "levelup": {
+      const sk = skills.get(row.item.skill);
+      const name = row.item.skill === "jarvis" ? "Jarvis" : (sk?.name ?? row.item.skill);
+      const color = row.item.skill === "jarvis" ? "var(--blue-deep)" : (sk?.color ?? OTHER_COLOR);
+      return (
+        <div className="agent-row agent-row--levelup" title={fullTime(row.item.ts)}>
+          {row.item.skill === "jarvis" || !sk ? (
+            <Face id="jarvis" mood="idle" color={JARVIS_COLOR} size={20} badge={false} />
+          ) : (
+            <button className="badge badge--mini" aria-label="Open Skills" onClick={onSkills} style={{ background: `color-mix(in srgb, ${sk.color} 16%, transparent)` }}>
+              <SkillIcon skill={sk} size={13} />
+            </button>
+          )}
+          <span className="agent-row__text">
+            <b>{name}</b> reached <b style={{ color }}>level {row.item.level}</b>
+          </span>
+        </div>
+      );
+    }
     case "digest":
       return (
         <div className="agent-row agent-row--digest" title={fullTime(row.item.ts)}>
@@ -583,27 +732,6 @@ function Popover({ x, y, alignEnd = false, label, onClose, children }: { x: numb
   );
 }
 
-/** Plain text with [F3]-style citations as chips. */
-function Cited({ text, onRef }: { text: string; onRef: OnRef }) {
-  return (
-    <>
-      {splitCitations(text).map((part, i) =>
-        typeof part === "string" ? (
-          part
-        ) : (
-          <span key={i}>
-            {part.map((ref) => (
-              <button key={ref} className="chip" onClick={(e) => onRef(ref, e)}>
-                {ref}
-              </button>
-            ))}
-          </span>
-        ),
-      )}
-    </>
-  );
-}
-
 function RefBody({ target, onRef }: { target: string; onRef: OnRef }) {
   const [info, setInfo] = useState<RefInfo | null>(null);
   const [err, setErr] = useState("");
@@ -740,6 +868,22 @@ function Composer({ onSend }: { onSend: (text: string) => Promise<void> }) {
       else localStorage.removeItem(DRAFT_KEY);
     } catch {}
   }, [text]);
+
+  // An empty roster slot hands the composer a starting phrase.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const start = String((e as CustomEvent<string>).detail ?? "");
+      setText((cur) => (cur.trim() ? cur : start));
+      requestAnimationFrame(() => {
+        const el = area.current;
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+      });
+    };
+    addEventListener("jarvis:prefill", on);
+    return () => removeEventListener("jarvis:prefill", on);
+  }, []);
 
   useEffect(() => {
     // Desktop: focus the composer on load. Touch: don't pop the keyboard.

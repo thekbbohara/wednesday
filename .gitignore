@@ -2,3 +2,6 @@ node_modules/
 data/
 .env
 dist/
+
+# OSINT skill scraping venv
+skills/osint/scripts/.venv/

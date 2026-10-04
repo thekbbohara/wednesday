@@ -32,23 +32,49 @@ pnpm dev
 JARVIS_DATA_DIR=/tmp/jarvis-demo node test/demo-server.ts
 ```
 
-### Web chat
+### Web UI
 
-One conversation under agent-hq's hero card (see `DESIGN.md`): Jarvis's face,
-model and state on the left, the agents' faces and counts on the right.
-Click an agent's face for its task, branch, why it needs you, its last report
-and the command to attach to its terminal.
+agent-hq's roster layout (see `DESIGN.md`): a nav pill on the left, Jarvis's
+portrait card (level, EXP, state) and the **Crew** roster on top (agent faces,
+padded with empty slots that start a new agent), and one big page card. Pages
+(the current one is in the URL, e.g. `#/tasks`):
 
-- Messages sent while Jarvis is thinking are answered together in its next
-  turn. Replies land in order of time, like any messenger.
-- Ids like `F3`, `T1`, `L42` in replies are clickable: the popover shows the
-  record from memory, so every claim about the past can be checked.
-- Under each reply, a receipt line shows what Jarvis wrote to memory during
-  that turn ("saved F3 . created T1 . updated Now").
-- A failed turn shows the reason and a **Retry** button.
-- Agent events show as one-line rows (started, finished a turn, needs an
-  answer, stopped, exited); the chip opens the full report or screen.
-- Scroll up to load older messages. Session rotation never shows.
+- **Command Center**: the chat. Messages sent while Jarvis is thinking are
+  answered together; ids like `F3`, `T1`, `L42` open the record; receipts show
+  what each reply wrote to memory; agent events, level-ups and the nightly
+  sleep are one-line rows; a failed turn has **Retry**. It stays mounted on
+  other pages (scroll and draft survive), and the nav shows a dot when a
+  reply arrives while you are elsewhere.
+- **Skills**: one card per skill with level, EXP bar and recent EXP.
+- **Tasks**: open, waiting on you (also counted on the nav), done, all; rows
+  expand to goal, plan and result.
+- **Memory**: the Now note, every fact with its source (outdated ones on
+  request, with what replaced them), daily digests, and search over facts,
+  tasks and the ledger (the same search Jarvis uses).
+- **Settings**: captain model, web access, when sessions rotate, nightly
+  sleep time and model. Changes save to `<data>/settings.json`, win over the
+  env defaults, and apply from the next message without a restart.
+
+### Skills and EXP
+
+Jarvis levels up by doing work. Every task is tagged with the skill it trains
+(the captain picks it): Coding, Design, Marketing, Hacking, Research, Writing,
+Ops. EXP is earned only from real, recorded work:
+
+| event | EXP |
+|---|---|
+| task created | +5 |
+| task finished (once per task) | +30 |
+| finished by an agent | +20 more |
+
+Levels cost 50 more EXP each (Lv 2 at 100, Lv 3 at 250, Lv 4 at 450, ...);
+Jarvis's own level grows on all EXP at a third of the pace. EXP lives in an
+append-only `exp` table, each row pointing at its task, so clicking a skill
+shows exactly what earned it. Add or recolor skills in `<data>/skills.json`:
+
+```json
+[{ "id": "music", "name": "Music", "color": "#f78fb3", "covers": "songs, mixing, audio" }]
+```
 
 Terminal chat commands: `/now`, `/tasks`, `/facts`, `/search <words>`,
 `/get <F1|T1|L1>`, `/rotate`, `/sessions`, `/quit`. Each reply ends with its
@@ -79,6 +105,10 @@ Memory lives in the `jarvis-data` volume. To keep it in a host folder,
 `/?token=<JARVIS_TOKEN>` once to sign in.
 
 ## Configuration
+
+The Settings page covers the everyday knobs (model, web access, rotation,
+sleep) and saves them to `<data>/settings.json`, which wins over the
+environment. Everything else is environment variables (or `.env`):
 
 | Variable                  | Default            | Meaning |
 |---------------------------|--------------------|---------|
@@ -132,6 +162,41 @@ Runtimes are configured like agent-hq's, in `<data>/runtimes.json`:
 ```json
 [{ "id": "claude-code", "command": "claude --model sonnet --permission-mode auto" }]
 ```
+
+## OSINT
+
+Jarvis can run open-source intelligence jobs for **authorized, legitimate use**:
+your own digital footprint, domains and infrastructure you own or are
+authorized to assess, company/vendor/client due diligence, and verifying where
+a public claim or account came from. Like other heavy work it goes to a worker
+agent with the `skills/osint` playbook, not into the captain's context; findings
+come back as facts with sources, and the task is tagged Research or Hacking.
+
+It works in phases (adapted from [smixs/osint-skill](https://github.com/smixs/osint-skill),
+minus its person-profiling parts): check available tools, a cheap parallel
+first pass, targeted extraction, cross-reference with A/B/C/D confidence grades,
+a capped recursive completeness check, then a sourced report. The scraping
+engine is Scrapling; keyless recon (whois, DNS, certificate transparency,
+Wayback, EXIF) needs no accounts, and paid search keys slot in via the env if
+you add them.
+
+**Boundaries, enforced in the skill and the captain's prompt:** open sources
+and assets you own or are authorized to assess only; people only as public,
+professional due diligence with a stated reason; never profiling, locating or
+surveilling a private individual, reading private messages, or bypassing access
+controls. The captain declines those and asks you to restate the target and
+purpose when it is unclear.
+
+Set it up once (builds the Scrapling venv, links the skill to `~/.claude/skills`
+so worker agents load it):
+
+```sh
+bash skills/osint/scripts/install-osint.sh
+bash skills/osint/scripts/diagnose.sh     # what's available
+```
+
+Then just ask, e.g. "what's exposed about example.com" or "due diligence on
+this vendor". Turn web access on in Settings so the worker can search.
 
 ## Nightly sleep
 
@@ -281,7 +346,8 @@ refuses to start instead of migrating, and prints the command to run by hand:
 node src/migrate.ts ~/.jarvis/memory.db     # backs up to memory.db.bak-v<old> first
 ```
 
-v2 (step 3) added the `agents` table. Jarvis also refuses to open a SQLite
+v2 (step 3) added the `agents` table; v3 added task skills and the `exp`
+table. Jarvis also refuses to open a SQLite
 file that is not its own.
 
 ## Layout
@@ -304,11 +370,13 @@ src/agents/tmux.ts       tmux driver (from agent-hq)
 src/agents/hooks.ts      turn hook script and CLI args
 src/agents/runtimes.ts   agent CLIs and runtimes.json
 src/migrate.ts           schema upgrades, run by hand
+src/skills/              skills config, EXP rules and levels
+skills/osint/            OSINT playbook: SKILL.md, scripts, references
 src/sleep/sleep.ts       nightly consolidation: prompt, validation, apply
 src/sleep/schedule.ts    daily schedule inside the server
 src/sleep.ts             run the sleep by hand (--dry-run)
 prompts/sleep.md         sleep model prompt
 prompts/captain.md       captain system prompt
-web/                     React UI (DESIGN.md); Face.tsx is shared with agent-hq
+web/                     React UI (DESIGN.md); Face.tsx is shared with agent-hq, Skills.tsx is the rail
 test/demo-server.ts      scripted captain + fake agents for UI work
 ```

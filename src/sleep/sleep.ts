@@ -56,9 +56,9 @@ export interface SleepModel {
 
 /** Headless Claude Code with schema-checked output; no tools, no session kept. */
 export class ClaudeSleepModel implements SleepModel {
-  private opts: { bin: string; model: string; promptFile: string; timeoutSec: number; cwd: string }
+  private opts: { bin: string; model: string | (() => string); promptFile: string; timeoutSec: number; cwd: string }
 
-  constructor(opts: { bin: string; model: string; promptFile: string; timeoutSec: number; cwd: string }) {
+  constructor(opts: { bin: string; model: string | (() => string); promptFile: string; timeoutSec: number; cwd: string }) {
     this.opts = opts
   }
 
@@ -66,7 +66,7 @@ export class ClaudeSleepModel implements SleepModel {
     const args = [
       '-p',
       '--output-format', 'json',
-      '--model', this.opts.model,
+      '--model', typeof this.opts.model === 'function' ? this.opts.model() : this.opts.model,
       '--setting-sources', '',
       '--strict-mcp-config',
       '--tools', '',

@@ -4,6 +4,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { fileURLToPath } from 'node:url'
+import { dirname } from 'node:path'
+import { DEFAULT_SKILLS, loadSkills, type Skill } from '../skills/skills.ts'
 import { FACT_KINDS, Memory, TASK_STATUSES, type Hit } from '../memory/store.ts'
 
 export interface AgentApi {
@@ -11,7 +13,10 @@ export interface AgentApi {
   token?: string
 }
 
-export function buildServer(mem: Memory, session: string | null, agentApi: AgentApi | null = null): McpServer {
+export function buildServer(mem: Memory, session: string | null, agentApi: AgentApi | null = null, skills: Skill[] = DEFAULT_SKILLS): McpServer {
+  const skillIds = skills.map((s) => s.id) as [string, ...string[]]
+  const skillHelp = `Skill this work trains (earns Jarvis EXP when created and when finished): ${skills.map((s) => `${s.id} (${s.covers})`).join('; ')}. Use "none" only for chores that fit no skill.`
+  const skillArg = z.enum([...skillIds, 'none'] as [string, ...string[]]).describe(skillHelp)
   const server = new McpServer({ name: 'jarvis', version: '0.1.0' })
 
   const ok = (data: unknown) => ({ content: [{ type: 'text' as const, text: typeof data === 'string' ? data : JSON.stringify(data, null, 2) }] })
@@ -112,15 +117,19 @@ export function buildServer(mem: Memory, session: string | null, agentApi: Agent
   server.registerTool(
     'task_create',
     {
-      description: 'Create a task record for a job: title, goal (with the why), optional plan.',
+      description: 'Create a task record for a job: title, goal (with the why), the skill it trains, optional plan.',
       inputSchema: {
         title: z.string().min(1).max(160),
         goal: z.string().min(1),
+        skill: skillArg,
         plan: z.string().optional(),
         status: z.enum(TASK_STATUSES).default('open'),
       },
     },
-    guard((a) => `Created T${mem.taskCreate(a, session).id}.`),
+    guard(({ skill, ...a }) => {
+      const t = mem.taskCreate({ ...a, skill: skill === 'none' ? null : skill }, session)
+      return `Created T${t.id}${t.skill ? ` (${t.skill})` : ''}.`
+    }),
   )
 
   server.registerTool(
@@ -134,10 +143,11 @@ export function buildServer(mem: Memory, session: string | null, agentApi: Agent
         plan: z.string().optional(),
         status: z.enum(TASK_STATUSES).optional(),
         result: z.string().optional(),
+        skill: skillArg.optional(),
       },
     },
-    guard(({ id, ...patch }) => {
-      const t = mem.taskUpdate(id, patch, session)
+    guard(({ id, skill, ...patch }) => {
+      const t = mem.taskUpdate(id, { ...patch, ...(skill ? { skill: skill === 'none' ? undefined : skill } : {}) }, session)
       return `T${t.id} is ${t.status}.`
     }),
   )
@@ -271,6 +281,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   }
   const mem = new Memory(db)
   const url = process.env.JARVIS_URL
-  const server = buildServer(mem, process.env.JARVIS_SESSION || null, url ? { url, token: process.env.JARVIS_TOKEN || undefined } : null)
+  const server = buildServer(mem, process.env.JARVIS_SESSION || null, url ? { url, token: process.env.JARVIS_TOKEN || undefined } : null, loadSkills(dirname(db)))
   await server.connect(new StdioServerTransport())
 }

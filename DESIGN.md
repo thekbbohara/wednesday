@@ -1,46 +1,47 @@
 # Jarvis design contract
 
 ## Style
-**Game studio, light, reduced to a messenger** (Anthropomorphic faces on a
-calm chat surface).
+**Game studio, light** (agent-hq's roster screen), with the chat as its
+command center.
 
-Why: the owner talks to one PA all day, in one chat that never ends. The
-screen should feel like a messenger with a person, not a dashboard. The
-characters are the same ones agent-hq uses (step 3 drives the same agents), so
-the faces, body colors and palette carry over and the owner reads them without
-learning anything new. Light and soft because it stays open all day next to
-dark terminals. agent-hq grew too many panels; Jarvis keeps exactly two
-things: the conversation and a hero card with the faces of the agents.
+Why: the owner talks to one PA all day and runs a crew of agents through it.
+The owner's sketch (2026-10-04) asks for agent-hq's character-select layout:
+a nav pill on the left, Jarvis as the hero portrait, the crew as a roster of
+faces, and one big panel whose first page is the Command Center chat. Jarvis's
+skills are gamified (levels and EXP). The faces, body colors and palette are
+agent-hq's, so nothing is new to learn. Light and soft because it stays open
+all day next to dark terminals.
 
 ## Layout
 ```
-+--------------------------------------------------------------+
-| +------+ Jarvis                       [a] [b] [c]            |  hero card
-| | face | [captain] [opus]             3 agents . 1 working   |  (floating,
-| +------+ (o) here   Active 2m ago     . 1 needs you          |   radius 22)
-+--------------------------------------------------------------+
-|              ------------ Today ------------                  |
-|  [J] reply (markdown, [F3] citation chips)                    |
-|      saved F3 . updated T1                       receipts     |
-|  [a] scraper finished a turn  L42                agent row    |
-|                               owner message bubble  [right]   |
-+--------------------------------------------------------------+
-|  [ message Jarvis...                                ] [send]  |  composer
-+--------------------------------------------------------------+
+       +----------------+ +------------------------------------------+
+ +--+  |  +--------+    | | Crew  6 agents . 2 working . 1 needs you  |
+ |CC|  |  |  face  |    | | [a] [b] [c] [d] [e] [ ] [ ]              |
+ |Sk|  |  +--------+    | | [f] [ ] [ ] [ ] [ ] [ ] [ ]               |
+ |Tk|  |  Jarvis Lv 7   | +------------------------------------------+
+ |Me|  |  ====---- exp  |
+ |St|  +----------------+ +------------------------------------------+
+ +--+  | <page title>                                                |
+ nav   |   Command Center | Skills | Tasks | Memory | Settings       |
+       |                                                             |
+       +-------------------------------------------------------------+
 ```
-- One column, max 760px wide, centered. The page never scrolls; only the
-  conversation does. It opens scrolled to the newest message and loads older
-  ones when scrolled to the top.
-- The header is agent-hq's hero card (the owner picked it): a floating white
-  card, not a full-bleed bar, so the page reads like agent-hq.
-- Nothing else: no sidebar, no settings, no tabs, no session or memory views.
-  Session rotation is invisible; the chat is the ledger.
+- Page max width 1280, centered, padding 24. Nav pill 64 wide on the left,
+  vertically centered (as in the sketch).
+- Top band, 236px tall: portrait card 300 wide + roster card filling the rest,
+  gap 16. Below, gap 16: the page card fills the remaining height. The page
+  itself never scrolls on desktop; only the content inside the page card does.
+- Pages: **Command Center** (default), **Skills**, **Tasks**, **Memory**,
+  **Settings**. The current page lives in the URL hash (`#/tasks`) so reloads
+  and the back button keep it. The chat stays mounted while another page is
+  open, so its scroll position and draft survive.
+- Session rotation is invisible; the chat is the ledger.
 
 ## Tokens (from agent-hq)
 | Token        | Value     | Use |
 |--------------|-----------|-----|
 | --bg         | #eceff5   | page |
-| --panel      | #ffffff   | hero card, captain bubbles, composer |
+| --panel      | #ffffff   | cards, captain bubbles, composer |
 | --panel-2    | #f4f6fa   | chips, input fill, hover |
 | --line       | #e1e5ee   | hairlines |
 | --ink        | #1a2130   | primary text, owner bubble fill |
@@ -64,24 +65,74 @@ pi #b28cf5, opencode #4fd1a5, kimi #f78fb3, other #8fb3c9.
   receipts 6; between turns from the same side 4.
 - Radius: bubble 18 (the corner toward the speaker 6), chip 999, composer 22,
   button 999.
-- Shadow: hero card and composer `0 1px 0 rgba(20,30,60,.04), 0 8px 24px -12px rgba(20,30,60,.12)`.
+- Shadow: cards and composer `0 1px 0 rgba(20,30,60,.04), 0 8px 24px -12px rgba(20,30,60,.12)`.
   Bubbles are flat (captain bubble 1px --line border).
 
 ## Components
-- **Hero card** (header): white card, radius 22, the panel shadow, 16px from
-  the page top, padding 16 20, aligned to the 760 column.
-  - Left: Jarvis face 64px (radius 28% of size, as agent-hq), then name
-    (Fredoka 600 22), a row of pills (`captain` on --panel-2 mono 12, model
-    name the same), then a row with the status pill and "Active 2m ago"
-    (12 --muted, time of the last reply).
+- **Card**: white, radius 22, the panel shadow, padding 20 (all four main
+  areas: portrait, roster, page card, and the nav pill radius 999).
+- **Portrait card**: Jarvis face 96px centered at the top, then name (Fredoka
+  600 22) with a level badge ("Lv 7", Fredoka 600 13, --blue-deep on 14%
+  tint, radius 999), then the overall EXP bar (6px, radius 999, --blue fill on
+  --panel-2) with "1,240 / 1,500 exp" (12 --muted, mono digits), then one row:
+  status pill + "Active 2m ago". The model tag sits in the card's top-right
+  corner (mono 11 --muted).
   - Status pill: dot + label, background the state color at 14%: here (mint),
     thinking (blue-deep), couldn't reply (coral), offline (--sleep).
-  - Right: agent faces (32px) in a row that wraps to at most two lines, then
-    a stats line under them like agent-hq's roster head: "3 agents . 1 working
-    . 1 needs you" with the counts colored (mint, amber, coral for errors).
-    No agents: the right side says "No agents yet" in --faint.
-  - Faces are buttons: hover shows the tooltip (name + state); click opens the
-    agent popover.
+- **Roster card**: like agent-hq's roster. Head: "Crew" (Fredoka 600 18) and
+  the stats line "6 agents . 2 working . 1 needs you" (counts colored mint,
+  amber, coral). Grid of 72px-wide, 80px-tall tiles: 60px face + 11px name (two rows fill the card); columns fill the
+  width; padded to two full rows with empty slots (--panel-2 rounded squares,
+  radius 28% like a face). Past two rows the grid scrolls. Faces open the agent
+  popover; an empty slot puts "Start an agent to " in the composer and focuses
+  it. Hover a face: the tooltip (name + state).
+- **Nav rail**: a vertical pill (64 wide, padding 12 0, radius 999), centered
+  on the left. One 44px button per page (radius 14): a 22px line icon in
+  --muted; hover --panel-2; the active page is --blue-deep on a 14% tint of
+  it. Tooltip with the page name to the right on hover/focus. Tasks shows a
+  small amber count badge when tasks wait on the owner; Command Center shows
+  a blue dot when a reply arrived while another page was open.
+- **Page card**: white card; head row with the page title (Fredoka 600 18) on
+  the left and the page's controls on the right (filter pills, search box);
+  content scrolls under the head with the same soft top edge as the thread.
+- **Skills page**: responsive grid of skill cards (min 220 wide, gap 16).
+  Card: --panel-2 fill, radius 18, padding 16; badge (40px, skill color at
+  16%) + name (Fredoka 600 17) + "Lv 3" pill in the skill color; EXP bar
+  (8px, skill color); "65 / 200 exp to Lv 4" (mono 11 --muted); what it
+  covers (13 --muted, 2 lines); last 3 EXP events (+30 finished T12 ...).
+  Clicking a card opens the skill popover with the full recent list.
+- **Skill popover**: icon + name + level badge, EXP bar with numbers, "Earns
+  EXP from" line (task created +5, task finished +30, done by an agent +20),
+  then the last 8 EXP events: "+30 finished T12 Fix login" with task chips.
+  Empty: "No EXP yet. Tasks tagged Coding earn it."
+- **Tasks page**: filter pills in the head (Open, Waiting on you, Done, All;
+  counts in each). Rows (min 52 tall, hairline between): task chip, title
+  (15/500), skill badge (20px), status pill, agent face (20px) when an agent
+  works on it, updated time (12 --muted, right). Click a row to expand: goal,
+  plan, result (13, pre-wrap), citations clickable.
+- **Memory page**: search box in the head (searches facts and the ledger,
+  with the same engine Jarvis uses). Sections with micro-labels: **Now** (the
+  note, in a --panel-2 block), **Facts** (rows: F chip, kind tag, subject
+  600 14, body 14, source chip, updated date; "show outdated" toggle reveals
+  stale facts struck through with their replacement chip), **Digests** (one
+  row per day: date + summary line, expands to the digest). With a query:
+  results grouped Facts / Tasks / Ledger, outdated ledger hits marked.
+- **Settings page**: one column, max 640, groups with micro-labels:
+  **Captain** (model select, web access toggle), **Sessions** (rotate at %
+  of context, max turns), **Nightly sleep** (time or off, model), and
+  **About** (read-only: data folder, token on/off, agent runtimes, skills
+  file). Controls save on change with a small "Saved" confirmation next to
+  the control; invalid values show the reason in coral under the field.
+  Toggle: 40x24 pill, --blue-deep when on.
+- **Skill colors**: coding #5cbdf4, design #f78fb3, marketing #ffb547, hacking
+  #4fd1a5, research #7c8cf8, writing #b28cf5, ops #8fb3c9. Custom skills from
+  skills.json bring their own color and a monogram instead of an icon.
+- **Level-up row** (in the chat): like the agent row, with the skill badge
+  (20px) instead of a face; clicking the badge opens the Skills page: "**Coding** reached level 3" in --ink 13, the
+  level in the skill color.
+- **Command Center card**: title "Command Center" (Fredoka 600 18) at the top
+  left, then the thread (scrolls), then the composer pinned at the bottom of
+  the card. Thread content max width 760, centered in the card.
 - **Agent popover**: the popover component, 360 max. Head: face 28 + name
   (600 14) + status pill. Rows (12/13): task chip + title, runtime, branch or
   folder (mono), why it needs you (amber) when it does, then its last report
@@ -118,7 +169,8 @@ pi #b28cf5, opencode #4fd1a5, kimi #f78fb3, other #8fb3c9.
   Shift+Enter newline, round --blue-deep send button (disabled when empty).
   Focus: 2px --blue-deep ring. Draft survives reloads (localStorage).
 - **Popover**: white panel 360 max wide, radius 14, shadow, closes on Esc or
-  outside click.
+  outside click. Opens under what was clicked (left-aligned), from the right
+  edge for roster faces.
 
 ## Motion
 - 0.2s cubic-bezier(.16,1,.3,1) for new messages (fade + 6px rise), popover,
@@ -129,10 +181,13 @@ pi #b28cf5, opencode #4fd1a5, kimi #f78fb3, other #8fb3c9.
 - Everything off under prefers-reduced-motion.
 
 ## Responsive
-- >= 760: layout above.
-- < 760: column is full width with 12px gutters; the hero card is compact:
-  face 44, pills and "Active" on one line, margin 8 from the top; agent faces
-  (28) scroll horizontally in a row under it with the stats line beside them.
-  Bubbles max 88%; composer sticks to the bottom and respects the safe-area
-  inset and the on-screen keyboard (100dvh).
+- >= 1100: layout above.
+- 760-1099: the nav becomes a horizontal pill above the top band (buttons in
+  a row, same order); portrait 260 wide; same 236 band.
+- < 760: single column, 12px gutters, page scrolls only inside the thread.
+  The nav is a bottom tab bar (5 buttons, 56 tall, safe-area inset) instead
+  of a pill. Compact portrait (face 52, name, level, EXP bar in one row), roster as one horizontally scrolling
+  row of 44px faces with the stats line; the Command Center takes the rest
+  of the height (100dvh). Bubbles max 88%; composer respects the safe-area
+  inset and the on-screen keyboard.
 - Verified at 375, 768, 1024, 1440.

@@ -22,7 +22,7 @@ export async function sleepNow(mem: Memory, cfg: Config, model: SleepModel, opts
 }
 
 export function startSleepSchedule(mem: Memory, cfg: Config, model: SleepModel, log = console.log): () => void {
-  if (!cfg.sleepAt) return () => {}
+  // cfg.sleepAt is read on every tick: Settings can turn the sleep on, off or move it.
   let running = false
   let retryAt = 0
   const tick = async () => {

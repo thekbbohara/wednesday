@@ -14,6 +14,9 @@ import { chatPage, describeRef, toChatItem, type ChatItem } from './web/chat.ts'
 import { Supervisor, SupervisorError, type AgentView } from './agents/supervisor.ts'
 import type { LedgerEntry } from './memory/store.ts'
 import { ClaudeSleepModel } from './sleep/sleep.ts'
+import { loadSkills, type Skill } from './skills/skills.ts'
+import { apply, check, currentSettings, loadSettings, MODELS, saveSettings, type Settings } from './settings.ts'
+import { EXP_RULES, OVERALL_SCALE, progress, type Progress } from './skills/levels.ts'
 import { startSleepSchedule } from './sleep/schedule.ts'
 
 export interface Agent {
@@ -25,12 +28,19 @@ export interface Agent {
   task: number | null
 }
 
+export interface SkillView extends Skill, Progress {}
+
 export interface Status {
   thinking: boolean
   agents: Agent[]
   model: string
   /** When Jarvis last replied, for "Active 2m ago". */
   lastReplyAt: string | null
+  /** Jarvis overall, from all EXP. */
+  jarvis: Progress
+  skills: SkillView[]
+  /** Tasks waiting on the owner, for the nav badge. */
+  waiting: number
 }
 
 const MAX_MESSAGE_CHARS = 20_000
@@ -48,6 +58,8 @@ export function createApp(opts: {
   selfUrl?: string
   /** Agents for the header, when there is no supervisor (demo). */
   agents?: () => Agent[]
+  /** Write settings changes to <data>/settings.json (off in tests). */
+  persistSettings?: boolean
 }) {
   const { mem, cfg, token, supervisor: sup } = opts
   const captain = new Captain(mem, cfg, opts.runner)
@@ -72,12 +84,20 @@ export function createApp(opts: {
     const [last] = mem.ledgerTail(1, ['captain'])
     return last?.ts ?? null
   }
-  const status = (): Status => ({
-    thinking: captain.busy || existsSync(lockPath),
-    agents: sup ? sup.list().map(toAgent) : (opts.agents?.() ?? []),
-    model: cfg.model,
-    lastReplyAt: lastReply(),
-  })
+  const skills = loadSkills(cfg.dataDir)
+  const status = (): Status => {
+    const exp = mem.expBySkill()
+    const total = [...exp.values()].reduce((a, b) => a + b, 0)
+    return {
+      thinking: captain.busy || existsSync(lockPath),
+      agents: sup ? sup.list().map(toAgent) : (opts.agents?.() ?? []),
+      model: cfg.model,
+      lastReplyAt: lastReply(),
+      jarvis: progress(total, OVERALL_SCALE),
+      skills: skills.map((sk) => ({ ...sk, ...progress(exp.get(sk.id) ?? 0) })),
+      waiting: mem.taskList({ status: 'waiting_owner', limit: 500 }).length,
+    }
+  }
   const tick = () => {
     const fresh = mem.ledgerSince(cursor)
     if (fresh.length) {
@@ -140,6 +160,58 @@ export function createApp(opts: {
     } catch (e) {
       return c.json({ error: (e as Error).message }, 400)
     }
+  })
+
+  // ---- pages: skills, tasks, memory, settings ------------------------------
+
+  app.get('/api/skills', (c) => {
+    const exp = mem.expBySkill()
+    return c.json({ skills: skills.map((sk) => ({ ...sk, ...progress(exp.get(sk.id) ?? 0), recent: mem.expEvents(sk.id, 3) })), rules: EXP_RULES })
+  })
+
+  app.get('/api/tasks', (c) => {
+    const agentsByTask = new Map<number, Agent>()
+    if (sup) for (const a of sup.list()) if (a.task_id) agentsByTask.set(a.task_id, toAgent(a))
+    const tasks = mem.taskList({ limit: 500 }).map((t) => ({ ...t, agent: agentsByTask.get(t.id) ?? null }))
+    return c.json({ tasks })
+  })
+
+  app.get('/api/memory', (c) => {
+    const q = c.req.query('q')?.trim()
+    if (q) return c.json({ query: q, hits: mem.search(q, { limit: 20, includeStale: true }) })
+    const digests = mem.ledgerTail(60, ['digest']).reverse().map((d) => ({ id: d.id, ts: d.ts, date: String(d.meta?.date ?? d.ts.slice(0, 10)), text: d.text }))
+    return c.json({ now: mem.nowGet(), facts: mem.factsAll(true).reverse(), digests })
+  })
+
+  app.get('/api/settings', (c) =>
+    c.json({
+      settings: currentSettings(cfg),
+      models: MODELS,
+      about: {
+        dataDir: cfg.dataDir,
+        token: !!token,
+        runtimes: sup ? sup.runtimes.map((r) => ({ id: r.id, command: r.command })) : [],
+        skillsFile: join(cfg.dataDir, 'skills.json'),
+        settingsFile: join(cfg.dataDir, 'settings.json'),
+      },
+    }),
+  )
+
+  app.put('/api/settings', async (c) => {
+    const patch = ((await c.req.json().catch(() => null)) ?? {}) as Partial<Settings>
+    const known = Object.fromEntries(Object.entries(patch).filter(([k]) => k in currentSettings(cfg))) as Partial<Settings>
+    const errors = check(known)
+    if (Object.keys(errors).length) return c.json({ errors }, 400)
+    apply(cfg, known)
+    if (opts.persistSettings) saveSettings(cfg)
+    tick()
+    return c.json({ settings: currentSettings(cfg) })
+  })
+
+  app.get('/api/skills/:id', (c) => {
+    const sk = skills.find((x) => x.id === c.req.param('id'))
+    if (!sk) return c.json({ error: 'not found' }, 404)
+    return c.json({ skill: { ...sk, ...progress(mem.expBySkill().get(sk.id) ?? 0) }, rules: EXP_RULES, events: mem.expEvents(sk.id, 8) })
   })
 
   app.get('/api/ref/:ref', (c) => {
@@ -288,8 +360,10 @@ export function createApp(opts: {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const cfg = loadConfig()
+  loadSettings(cfg)
   const mem = new Memory(cfg.dbPath, { nowBudgetChars: cfg.nowBudgetChars })
-  const runner = new ClaudeRunner({ bin: cfg.claudeBin, model: cfg.model, cwd: cfg.dataDir, allowedTools: cfg.allowedTools, timeoutSec: cfg.turnTimeout })
+  // Getters, so changes made in Settings apply to the next turn.
+  const runner = new ClaudeRunner({ bin: cfg.claudeBin, model: () => cfg.model, cwd: cfg.dataDir, allowedTools: () => cfg.allowedTools, timeoutSec: cfg.turnTimeout })
   const host = process.env.HOST || '127.0.0.1'
   const port = Number(process.env.PORT || 4788)
   const token = process.env.JARVIS_TOKEN || undefined
@@ -298,7 +372,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const selfUrl = `http://${host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host}:${port}`
   const supervisor = new Supervisor({ mem, dataDir: cfg.dataDir, socket: process.env.JARVIS_TMUX_SOCKET || 'jarvis', hook: { url: selfUrl, token } })
   supervisor.start()
-  const { app } = createApp({ mem, cfg, runner, token, supervisor, selfUrl, webRoot: resolve(import.meta.dirname, '../dist') })
-  startSleepSchedule(mem, cfg, new ClaudeSleepModel({ bin: cfg.claudeBin, model: cfg.sleepModel, promptFile: cfg.sleepPromptFile, timeoutSec: cfg.turnTimeout, cwd: cfg.dataDir }))
+  const { app } = createApp({ mem, cfg, runner, token, supervisor, selfUrl, persistSettings: true, webRoot: resolve(import.meta.dirname, '../dist') })
+  startSleepSchedule(mem, cfg, new ClaudeSleepModel({ bin: cfg.claudeBin, model: () => cfg.sleepModel, promptFile: cfg.sleepPromptFile, timeoutSec: cfg.turnTimeout, cwd: cfg.dataDir }))
   serve({ fetch: app.fetch, hostname: host, port }, () => console.log(`jarvis on http://${host}:${port} - memory ${cfg.dbPath} - model ${cfg.model} - sleep ${cfg.sleepAt || 'off'}`))
 }
