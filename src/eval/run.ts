@@ -1,8 +1,8 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning
 // Long-run eval: drives the real captain through hundreds of scripted turns,
 // with real session rotation and nightly sleeps, and scores recall probes.
-//   node src/eval/run.ts --data /tmp/jarvis-eval --turns 520 --model haiku
-//   node src/eval/run.ts --data /tmp/jarvis-eval --report     (report only)
+//   node src/eval/run.ts --data /tmp/majordomo-eval --turns 520 --model haiku
+//   node src/eval/run.ts --data /tmp/majordomo-eval --report     (report only)
 // Resumable: progress is one JSON line per turn in <data>/eval.jsonl.
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'

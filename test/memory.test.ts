@@ -77,8 +77,8 @@ describe('now', () => {
   it('versions updates and enforces the budget', () => {
     const m = mk({ nowBudgetChars: 50 })
     expect(m.nowGet().version).toBe(0)
-    m.nowUpdate('Goal: build jarvis')
-    expect(m.nowGet()).toMatchObject({ text: 'Goal: build jarvis', version: 1 })
+    m.nowUpdate('Goal: build majordomo')
+    expect(m.nowGet()).toMatchObject({ text: 'Goal: build majordomo', version: 1 })
     expect(() => m.nowUpdate('x'.repeat(51))).toThrow(/budget/)
     expect(m.nowGet().version).toBe(1)
   })
@@ -98,16 +98,16 @@ describe('sessions', () => {
 
 describe('schema safety', () => {
   it('refuses a foreign database instead of writing to it', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'jarvis-'))
+    const dir = mkdtempSync(join(tmpdir(), 'majordomo-'))
     const path = join(dir, 'other.db')
     const d = new DatabaseSync(path)
     d.exec('CREATE TABLE important(x)')
     d.close()
-    expect(() => new Memory(path)).toThrow(/not a Jarvis database/)
+    expect(() => new Memory(path)).toThrow(/not a Majordomo database/)
   })
 
   it('refuses a schema version it does not know', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'jarvis-'))
+    const dir = mkdtempSync(join(tmpdir(), 'majordomo-'))
     const path = join(dir, 'm.db')
     new Memory(path).close()
     const d = new DatabaseSync(path)

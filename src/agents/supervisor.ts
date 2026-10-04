@@ -87,7 +87,7 @@ export interface SupervisorOptions {
   name?: string
   dataDir: string
   socket: string
-  /** Where agents' turn hooks reach Jarvis. */
+  /** Where agents' turn hooks reach Majordomo. */
   hook: { url: string; token?: string } | null
   pollMs?: number
   timings?: Partial<typeof DEFAULT_TIMINGS>
@@ -110,7 +110,7 @@ export class Supervisor extends EventEmitter {
   constructor(opts: SupervisorOptions) {
     super()
     this.mem = opts.mem
-    this.name = opts.name ?? 'Jarvis'
+    this.name = opts.name ?? 'Majordomo'
     this.dataDir = opts.dataDir
     this.hook = opts.hook
     this.tmux = new Tmux(opts.socket)
@@ -131,7 +131,7 @@ export class Supervisor extends EventEmitter {
   }
 
   static session(id: string): string {
-    return `jarvis_${id}`
+    return `majordomo_${id}`
   }
 
   // ---------- reads ----------
@@ -209,7 +209,7 @@ export class Supervisor extends EventEmitter {
     if (input.repo) {
       repo = await repoRoot(expand(input.repo))
       if (!repo) throw new SupervisorError(`Not a git repo: ${input.repo}`)
-      branch = input.branch?.trim() || `jarvis/${id}`
+      branch = input.branch?.trim() || `majordomo/${id}`
       cwd = join(this.dataDir, 'worktrees', id)
       mkdirSync(join(this.dataDir, 'worktrees'), { recursive: true })
       try {
@@ -238,13 +238,13 @@ export class Supervisor extends EventEmitter {
   private async launch(a: AgentRow, runtime: Runtime, brief: string): Promise<void> {
     const session = Supervisor.session(a.id)
     await this.tmux.kill(session)
-    const env: Record<string, string> = { JARVIS_AGENT: a.id }
+    const env: Record<string, string> = { MAJORDOMO_AGENT: a.id }
     let command = runtime.command
     if (runtime.turnHook === 'claude') command += claudeSettingsArg(this.hook ? this.hookScript : null)
     else if (runtime.turnHook && this.hook) command += turnHookArgs(runtime.turnHook, this.hookScript)
     if (this.hook && runtime.turnHook) {
-      env.JARVIS_URL = this.hook.url
-      if (this.hook.token) env.JARVIS_TOKEN = this.hook.token
+      env.MAJORDOMO_URL = this.hook.url
+      if (this.hook.token) env.MAJORDOMO_TOKEN = this.hook.token
     }
     await this.tmux.start(session, a.cwd, command, env)
     this.trackers.set(a.id, {
@@ -354,7 +354,7 @@ export class Supervisor extends EventEmitter {
   private async sample(a: AgentRow, pane: PaneInfo | undefined, now: number): Promise<void> {
     let t = this.trackers.get(a.id)
     if (!t) {
-      // Jarvis restarted while the agent kept running: pick it up as it is.
+      // Majordomo restarted while the agent kept running: pick it up as it is.
       t = {
         print: null,
         changedAt: 0,
@@ -401,7 +401,7 @@ export class Supervisor extends EventEmitter {
     }
     await this.deliverBrief(a, t, now)
 
-    // No turn hook (the runtime has none, or Jarvis has no URL for it): a turn ends when the agent has gone quiet.
+    // No turn hook (the runtime has none, or Majordomo has no URL for it): a turn ends when the agent has gone quiet.
     const runtime = this.runtimes.find((r) => r.id === a.runtime)
     if (!(runtime?.turnHook && this.hook) && !t.brief) {
       if (verdict.mood === 'working') t.busy = true
@@ -420,7 +420,7 @@ export class Supervisor extends EventEmitter {
     }
     if (t.needsSent === key || now - t.needsSince < this.timings.needsStableMs) return
     t.needsSent = key
-    // The folder-trust prompt for a worktree Jarvis made itself is not a decision for anyone.
+    // The folder-trust prompt for a worktree Majordomo made itself is not a decision for anyone.
     const trust = t.live.reason === 'trust prompt' && a.repo ? t.live.choices?.find((c) => /\btrust\b|^yes\b/i.test(c.label) && !/^no\b/i.test(c.label)) : null
     if (trust) {
       try {
@@ -465,7 +465,7 @@ function markSent(t: Tracker): void {
 }
 
 /** The first message a worker gets. */
-export function composeBrief(a: Pick<AgentRow, 'id' | 'task_id' | 'cwd' | 'branch' | 'brief'>, taskTitle: string | null, name = 'Jarvis'): string {
+export function composeBrief(a: Pick<AgentRow, 'id' | 'task_id' | 'cwd' | 'branch' | 'brief'>, taskTitle: string | null, name = 'Majordomo'): string {
   const task = a.task_id ? ` (task T${a.task_id}${taskTitle ? `: ${taskTitle}` : ''})` : ''
   const where = a.branch
     ? `You are in a fresh git worktree made for this job, on branch ${a.branch}. Commit your work there. Do not push, merge or open a PR unless the job says so.`

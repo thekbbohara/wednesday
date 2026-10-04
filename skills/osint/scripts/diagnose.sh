@@ -37,4 +37,4 @@ for k in PERPLEXITY_API_KEY EXA_API_KEY TAVILY_API_KEY SHODAN_API_KEY; do
   [ -n "${!k:-}" ] && ok "$k set" || no "$k" "unset"
 done
 echo
-echo "Jarvis gives the agent WebSearch + WebFetch when web access is on (Settings)."
+echo "Majordomo gives the agent WebSearch + WebFetch when web access is on (Settings)."

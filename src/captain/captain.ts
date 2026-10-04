@@ -107,14 +107,14 @@ export class Captain {
 
   private mcpServers(sessionId: string) {
     return {
-      jarvis: {
+      majordomo: {
         command: process.execPath,
         args: ['--disable-warning=ExperimentalWarning', MCP_SERVER],
         env: {
-          JARVIS_DB: this.cfg.dbPath,
-          JARVIS_SESSION: sessionId,
-          ...(this.agents ? { JARVIS_URL: this.agents.url } : {}),
-          ...(this.agents?.token ? { JARVIS_TOKEN: this.agents.token } : {}),
+          MAJORDOMO_DB: this.cfg.dbPath,
+          MAJORDOMO_SESSION: sessionId,
+          ...(this.agents ? { MAJORDOMO_URL: this.agents.url } : {}),
+          ...(this.agents?.token ? { MAJORDOMO_TOKEN: this.agents.token } : {}),
         } as Record<string, string>,
       },
     }

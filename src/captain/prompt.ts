@@ -84,7 +84,7 @@ export function buildTurnPrompt(
   const header = parts.length ? `<memory>\n${parts.join('\n\n')}\n</memory>\n\n` : ''
   const live =
     agents === null
-      ? '<agents>unavailable: the Jarvis web server is not running, so agent tools will fail</agents>\n\n'
+      ? '<agents>unavailable: the Majordomo web server is not running, so agent tools will fail</agents>\n\n'
       : `<agents note="live, from the supervisor">\n${agents || '(none)'}\n</agents>\n\n`
   const messages = inputs.map(fmtInput).join('\n')
   return { text: header + live + messages, injected }

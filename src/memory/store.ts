@@ -1,4 +1,4 @@
-// Jarvis memory: one SQLite file, four layers (now, facts, tasks, ledger).
+// Majordomo memory: one SQLite file, four layers (now, facts, tasks, ledger).
 // The ledger is append-only and is the source of truth for "what happened";
 // facts, tasks and now are the distilled, budgeted views the captain loads.
 import { DatabaseSync } from 'node:sqlite'
@@ -33,7 +33,7 @@ export interface AgentRow {
   task_id: number | null
   runtime: string
   cwd: string
-  /** Source repo when the agent works in a worktree Jarvis created. */
+  /** Source repo when the agent works in a worktree Majordomo created. */
   repo: string | null
   branch: string | null
   brief: string
@@ -215,8 +215,8 @@ export class Memory {
     const hasMeta = this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='meta'").get()
     if (!hasMeta) {
       const tables = this.db.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type='table'").get() as { n: number }
-      if (tables.n > 0) throw new Error('memory file is not a Jarvis database (has tables but no meta); refusing to touch it')
-      // Fresh file created by Jarvis itself: lay down the schema.
+      if (tables.n > 0) throw new Error('memory file is not a Majordomo database (has tables but no meta); refusing to touch it')
+      // Fresh file created by Majordomo itself: lay down the schema.
       this.db.exec('BEGIN')
       this.db.exec(SCHEMA)
       for (const v of Object.keys(MIGRATIONS).map(Number).sort((a, b) => a - b)) this.db.exec(MIGRATIONS[v])
@@ -231,7 +231,7 @@ export class Memory {
       throw new Error(
         v < SCHEMA_VERSION
           ? `memory schema v${v}, code expects v${SCHEMA_VERSION}. Back up and migrate it by hand: node src/migrate.ts ${this.path}`
-          : `memory schema v${v} is newer than this code (v${SCHEMA_VERSION}); update Jarvis`,
+          : `memory schema v${v} is newer than this code (v${SCHEMA_VERSION}); update Majordomo`,
       )
     }
   }
@@ -393,7 +393,7 @@ export class Memory {
     if (agent) this.expAward(t.skill, EXP_RULES.delegated, `delegated T${t.id} to ${agent.id}`, `T${t.id}`, session)
   }
 
-  /** Appends EXP; a level-up (of the skill or of Jarvis overall) is written to the ledger. */
+  /** Appends EXP; a level-up (of the skill or of Majordomo overall) is written to the ledger. */
   expAward(skill: string, amount: number, reason: string, ref: string | null, session?: string | null): ExpEvent {
     const before = this.expBySkill()
     const totalBefore = [...before.values()].reduce((a, b) => a + b, 0)
@@ -403,7 +403,7 @@ export class Memory {
     if (now > was) this.append('system', `${skill} reached level ${now}`, { session, meta: { levelup: { skill, level: now } } })
     const overallWas = levelFor(totalBefore / OVERALL_SCALE)
     const overallNow = levelFor((totalBefore + amount) / OVERALL_SCALE)
-    if (overallNow > overallWas) this.append('system', `Jarvis reached level ${overallNow}`, { session, meta: { levelup: { skill: 'jarvis', level: overallNow } } })
+    if (overallNow > overallWas) this.append('system', `Majordomo reached level ${overallNow}`, { session, meta: { levelup: { skill: 'majordomo', level: overallNow } } })
     return this.db.prepare('SELECT * FROM exp WHERE id = ?').get(Number(r.lastInsertRowid)) as unknown as ExpEvent
   }
 

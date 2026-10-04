@@ -42,7 +42,7 @@ describe('sleepInput', () => {
     ]
     const drop = [
       mem.append('captain', 'NOTHING_TO_REPORT', { meta: { silent: true } }),
-      mem.append('agent', 'Jarvis to w: go', { meta: { agent: 'w', event: 'message' } }),
+      mem.append('agent', 'Majordomo to w: go', { meta: { agent: 'w', event: 'message' } }),
       mem.append('now', 'Now v1'),
       mem.append('rotation', 'rotated'),
       mem.append('fact', 'F1 by sleep', { session: 'sleep', meta: { fact: 1 } }),
@@ -194,22 +194,22 @@ describe('schedule', () => {
   })
 
   it('rejects a malformed time', () => {
-    const prev = process.env.JARVIS_SLEEP_AT
-    process.env.JARVIS_SLEEP_AT = '4am'
+    const prev = process.env.MAJORDOMO_SLEEP_AT
+    process.env.MAJORDOMO_SLEEP_AT = '4am'
     try {
       expect(() => loadConfig()).toThrow(/HH:MM/)
     } finally {
-      if (prev === undefined) delete process.env.JARVIS_SLEEP_AT
-      else process.env.JARVIS_SLEEP_AT = prev
+      if (prev === undefined) delete process.env.MAJORDOMO_SLEEP_AT
+      else process.env.MAJORDOMO_SLEEP_AT = prev
     }
   })
 })
 
 // Real haiku on a seeded day: a contradiction, a duplicate, a new durable fact, chit-chat.
-describe.skipIf(process.env.JARVIS_LIVE !== '1')('live sleep', () => {
+describe.skipIf(process.env.MAJORDOMO_LIVE !== '1')('live sleep', () => {
   it('supersedes the changed fact, merges the duplicate, adds the new one, and invents nothing', { timeout: 300_000 }, async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), 'jarvis-sleep-live-'))
-    const cfg = loadConfig({ dataDir, sleepModel: process.env.JARVIS_LIVE_MODEL || 'haiku' })
+    const dataDir = mkdtempSync(join(tmpdir(), 'majordomo-sleep-live-'))
+    const cfg = loadConfig({ dataDir, sleepModel: process.env.MAJORDOMO_LIVE_MODEL || 'haiku' })
     const { mem, at } = clocked()
     const city = mem.factWrite({ kind: 'owner', subject: 'owner city', body: 'The owner lives in Pokhara.', source: 'owner' })
     const short1 = mem.factWrite({ kind: 'preference', subject: 'reply length', body: 'The owner wants short replies.', source: 'owner' })

@@ -520,7 +520,7 @@ export function SettingsPage({ name }: { name: string }) {
             <dt>Data folder</dt>
             <dd className="mono">{data.about.dataDir}</dd>
             <dt>Sign-in token</dt>
-            <dd>{data.about.token ? "on" : "off (fine on localhost; set JARVIS_TOKEN before exposing it)"}</dd>
+            <dd>{data.about.token ? "on" : "off (fine on localhost; set MAJORDOMO_TOKEN before exposing it)"}</dd>
             <dt>Agent runtimes</dt>
             <dd>
               {data.about.runtimes.length

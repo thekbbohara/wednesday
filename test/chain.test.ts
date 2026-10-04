@@ -68,7 +68,7 @@ class ChainFake implements Runner {
 }
 
 function setup(fallbacks: string, clock?: () => Date) {
-  const dataDir = mkdtempSync(join(tmpdir(), 'jarvis-chain-'))
+  const dataDir = mkdtempSync(join(tmpdir(), 'majordomo-chain-'))
   const cfg = loadConfig({ dataDir, captainChain: parseChain(fallbacks), limitCooldownMs: 60_000 })
   const mem = new Memory(cfg.dbPath, clock ? { clock } : {})
   const fakes = new Map<string, ChainFake>()

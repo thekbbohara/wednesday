@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { claudeSettingsArg, turnHookArgs, writeHookScript } from "../src/agents/hooks.ts";
 
-const dir = mkdtempSync(join(tmpdir(), "jarvis-hooks-"));
+const dir = mkdtempSync(join(tmpdir(), "majordomo-hooks-"));
 const script = writeHookScript(dir);
 const received: Array<{ auth: string | undefined; body: Record<string, string> }> = [];
 let server: Server;
@@ -40,7 +40,7 @@ function hook(args: string[], environment: NodeJS.ProcessEnv, input?: string): P
   });
 }
 
-const env = () => ({ ...process.env, JARVIS_URL: url, JARVIS_AGENT: "scraper", JARVIS_TOKEN: "s3cret" });
+const env = () => ({ ...process.env, MAJORDOMO_URL: url, MAJORDOMO_AGENT: "scraper", MAJORDOMO_TOKEN: "s3cret" });
 
 describe("turn hook script", () => {
   it("forwards a Claude Stop payload from stdin", async () => {
@@ -54,9 +54,9 @@ describe("turn hook script", () => {
     expect(received.at(-1)?.body.message).toBe("Done: tests pass.");
   });
 
-  it("never fails the agent: bad payload or Jarvis down still exits 0", async () => {
+  it("never fails the agent: bad payload or Majordomo down still exits 0", async () => {
     expect(await hook(["claude"], env(), "not json")).toBe(0);
-    const down = { ...env(), JARVIS_URL: "http://127.0.0.1:9" };
+    const down = { ...env(), MAJORDOMO_URL: "http://127.0.0.1:9" };
     expect(await hook(["claude"], down, JSON.stringify({ last_assistant_message: "x" }))).toBe(0);
   });
 });

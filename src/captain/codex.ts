@@ -1,5 +1,5 @@
 // Runs one captain turn on the Codex CLI (`codex exec --json`), as the last
-// link of the provider chain. Codex picks its own thread ids, so Jarvis's
+// link of the provider chain. Codex picks its own thread ids, so Majordomo's
 // session ids are mapped to them in <data>/codex-threads.json. Codex reports
 // no context window, so on Codex the captain rotates on its turn cap.
 import { spawn } from 'node:child_process'
@@ -58,7 +58,7 @@ export class CodexRunner implements Runner {
       '--ignore-user-config',
       // Unattended: auto-run the memory tool calls. This is the one flag both `exec` and
       // `exec resume` accept, and it also drops Codex's sandbox - so a Codex captain can run
-      // shell freely. It only runs when the owner adds `codex` to JARVIS_FALLBACKS and Claude
+      // shell freely. It only runs when the owner adds `codex` to MAJORDOMO_FALLBACKS and Claude
       // is exhausted. See the README note on the Codex fallback.
       '--dangerously-bypass-approvals-and-sandbox',
       ...(this.opts.model ? ['-m', this.opts.model] : []),

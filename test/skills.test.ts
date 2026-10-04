@@ -19,7 +19,7 @@ describe('levels', () => {
 
 describe('skills config', () => {
   it('uses the defaults, extended by skills.json', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'jarvis-skills-'))
+    const dir = mkdtempSync(join(tmpdir(), 'majordomo-skills-'))
     expect(loadSkills(dir)).toBe(DEFAULT_SKILLS)
     writeFileSync(join(dir, 'skills.json'), JSON.stringify([{ id: 'music', name: 'Music', color: '#f78fb3' }, { id: 'coding', color: '#000000' }]))
     const s = loadSkills(dir)
@@ -56,14 +56,14 @@ describe('EXP from tasks', () => {
     expect([...m.expBySkill().keys()].sort()).toEqual(['coding', 'design'])
   })
 
-  it('writes level-ups to the ledger, for the skill and for Jarvis', () => {
+  it('writes level-ups to the ledger, for the skill and for Majordomo', () => {
     const m = new Memory(':memory:')
     for (let i = 0; i < 3; i++) m.taskUpdate(m.taskCreate({ title: `job ${i}`, goal: 'g', skill: 'coding' }).id, { status: 'done' })
-    // 3 x 35 = 105 coding EXP: coding reaches level 2; Jarvis needs 300 for its level 2.
+    // 3 x 35 = 105 coding EXP: coding reaches level 2; Majordomo needs 300 for its level 2.
     const ups = m.ledgerTail(10, ['system']).map((e) => e.meta?.levelup)
     expect(ups).toEqual([{ skill: 'coding', level: 2 }])
     for (let i = 0; i < 6; i++) m.taskUpdate(m.taskCreate({ title: `more ${i}`, goal: 'g', skill: 'ops' }).id, { status: 'done' })
-    expect(m.ledgerTail(10, ['system']).map((e) => e.text)).toContain('Jarvis reached level 2')
+    expect(m.ledgerTail(10, ['system']).map((e) => e.text)).toContain('Majordomo reached level 2')
   })
 
   it('keeps EXP append-only', () => {
@@ -76,7 +76,7 @@ describe('EXP from tasks', () => {
 
 describe('migration to v3', () => {
   it('upgrades a v2 file by hand, with a backup, and keeps its data', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'jarvis-mig-'))
+    const dir = mkdtempSync(join(tmpdir(), 'majordomo-mig-'))
     const path = join(dir, 'memory.db')
     const m = new Memory(path)
     m.taskCreate({ title: 'old task', goal: 'g' })
@@ -97,7 +97,7 @@ describe('migration to v3', () => {
 
 describe('addSkill', () => {
   it('adds to skills.json with the next free colour, and refuses duplicates and overflow', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'jarvis-addskill-'))
+    const dir = mkdtempSync(join(tmpdir(), 'majordomo-addskill-'))
     const sk = addSkill(dir, { name: 'Video Editing', covers: 'cutting and grading video' })
     expect(sk).toMatchObject({ id: 'video-editing', name: 'Video Editing', color: '#e8793a' })
     expect(loadSkills(dir).map((s) => s.id)).toContain('video-editing')

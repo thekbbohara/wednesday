@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { Memory } from '../src/memory/store.ts'
 
 const SERVER = fileURLToPath(new URL('../src/mcp/server.ts', import.meta.url))
-const db = join(mkdtempSync(join(tmpdir(), 'jarvis-mcp-')), 'memory.db')
+const db = join(mkdtempSync(join(tmpdir(), 'majordomo-mcp-')), 'memory.db')
 let client: Client
 
 const text = (r: unknown) => ((r as { content: { text: string }[] }).content[0]?.text ?? '')
@@ -22,7 +22,7 @@ beforeAll(async () => {
     new StdioClientTransport({
       command: process.execPath,
       args: ['--disable-warning=ExperimentalWarning', SERVER],
-      env: { ...process.env, JARVIS_DB: db, JARVIS_SESSION: 'sess-1' } as Record<string, string>,
+      env: { ...process.env, MAJORDOMO_DB: db, MAJORDOMO_SESSION: 'sess-1' } as Record<string, string>,
     }),
   )
 })
@@ -31,7 +31,7 @@ afterAll(async () => {
   await client?.close()
 })
 
-describe('jarvis MCP server', () => {
+describe('majordomo MCP server', () => {
   it('lists the captain tools', async () => {
     const names = (await client.listTools()).tools.map((t) => t.name).sort()
     expect(names).toEqual(

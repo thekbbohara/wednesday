@@ -9,8 +9,8 @@ import { MemoryPage, PageHead, SettingsPage, SkillsPage, TasksPage } from "./pag
 import { Face, type Mood } from "./Face";
 import { buildRows, fullTime, splitCitations, type Row } from "./thread";
 
-const JARVIS_COLOR = "#5cbdf4";
-const DRAFT_KEY = "jarvis:draft";
+const MAJORDOMO_COLOR = "#5cbdf4";
+const DRAFT_KEY = "majordomo:draft";
 const NEAR_BOTTOM = 80;
 
 type Receipt = Extract<ChatItem, { type: "receipt" }>;
@@ -18,7 +18,7 @@ type Receipt = Extract<ChatItem, { type: "receipt" }>;
 export function App() {
   const [items, setItems] = useState<ChatItem[]>([]);
   const [hasMore, setHasMore] = useState(false);
-  const [status, setStatus] = useState<Status>({ name: "Jarvis", thinking: false, agents: [], model: "", lastReplyAt: null, jarvis: { level: 1, exp: 0, floor: 0, next: 300 }, skills: [], waiting: 0 });
+  const [status, setStatus] = useState<Status>({ name: "Majordomo", thinking: false, agents: [], model: "", lastReplyAt: null, majordomo: { level: 1, exp: 0, floor: 0, next: 300 }, skills: [], waiting: 0 });
   const [page, goPage] = usePage();
   // Bumps on every ledger change, so open pages refresh themselves.
   const [version, setVersion] = useState(0);
@@ -208,7 +208,7 @@ export function App() {
                 {hasMore && <div className="thread__more">Loading earlier messages</div>}
                 {loaded && !items.length && <Empty name={status.name} />}
                 {rows.map((row) => (
-                  <RowView key={row.key} row={row} onRef={openRef} colors={colors} skills={skillMap} onSkills={() => goPage("skills")} jarvisName={status.name} />
+                  <RowView key={row.key} row={row} onRef={openRef} colors={colors} skills={skillMap} onSkills={() => goPage("skills")} majordomoName={status.name} />
                 ))}
                 {status.thinking && <Pending receipts={trailing} onRef={openRef} name={status.name} />}
                 {!status.thinking && trailing.length > 0 && <Receipts receipts={trailing} onRef={openRef} />}
@@ -278,15 +278,15 @@ type PopoverTarget =
 
 const OTHER_COLOR = "#8fb3c9";
 
-/** Jarvis's portrait: face, level and EXP, state. */
+/** Majordomo's portrait: face, level and EXP, state. */
 function Portrait({ mood, stateText, status }: { mood: Mood; stateText: string; status: Status }) {
   const narrow = useNarrow();
   const now = useNow(30_000);
-  const j = status.jarvis;
+  const j = status.majordomo;
   return (
     <div className="portrait">
       {status.model && <span className="portrait__model">{status.model}</span>}
-      <Face id="jarvis" mood={mood} color={JARVIS_COLOR} size={narrow ? 52 : 96} badge={false} />
+      <Face id="majordomo" mood={mood} color={MAJORDOMO_COLOR} size={narrow ? 52 : 96} badge={false} />
       <div className="portrait__info">
         <h1 className="portrait__name">
           {status.name} <span className="lv">Lv {j.level}</span>
@@ -378,7 +378,7 @@ function Roster({ agents, onAgent }: { agents: Agent[]; onAgent: OnAgent }) {
             className="tile tile--empty"
             aria-label="Start an agent"
             title="Start an agent"
-            onClick={() => dispatchEvent(new CustomEvent("jarvis:prefill", { detail: "Start an agent to " }))}
+            onClick={() => dispatchEvent(new CustomEvent("majordomo:prefill", { detail: "Start an agent to " }))}
           >
             <span className="tile__slot" />
           </button>
@@ -428,7 +428,7 @@ const MOOD_LABEL: Record<Mood, string> = { idle: "idle", working: "working", nee
 function Empty({ name }: { name: string }) {
   return (
     <div className="empty">
-      <Face id="jarvis" mood="idle" color={JARVIS_COLOR} size={64} badge={false} />
+      <Face id="majordomo" mood="idle" color={MAJORDOMO_COLOR} size={64} badge={false} />
       <p className="empty__title">Hi, I'm {name}.</p>
       <p className="empty__text">Tell me what you're working on. I'll remember it, keep track of the work, and get it done.</p>
     </div>
@@ -444,14 +444,14 @@ function RowView({
   colors,
   skills,
   onSkills,
-  jarvisName,
+  majordomoName,
 }: {
   row: Row;
   onRef: OnRef;
   colors: Map<string, string>;
   skills: Map<string, SkillView>;
   onSkills: () => void;
-  jarvisName: string;
+  majordomoName: string;
 }) {
   switch (row.kind) {
     case "day":
@@ -471,7 +471,7 @@ function RowView({
     case "captain":
       return (
         <div className={`msg msg--captain${row.first ? " msg--first" : ""}`}>
-          <div className="msg__face">{row.first && <Face id="jarvis" mood="idle" color={JARVIS_COLOR} size={28} badge={false} />}</div>
+          <div className="msg__face">{row.first && <Face id="majordomo" mood="idle" color={MAJORDOMO_COLOR} size={28} badge={false} />}</div>
           <div className="msg__body">
             <Bubble side="captain" ts={row.item.ts}>
               <Rich text={row.item.text} onRef={onRef} />
@@ -490,7 +490,7 @@ function RowView({
         </div>
       );
     case "error":
-      return <ErrorNotice item={row.item} retryable={row.retryable} name={jarvisName} />;
+      return <ErrorNotice item={row.item} retryable={row.retryable} name={majordomoName} />;
     case "levelup": {
       if (row.item.type === "newskill") {
         const n = row.item;
@@ -507,12 +507,14 @@ function RowView({
         );
       }
       const sk = skills.get(row.item.skill);
-      const name = row.item.skill === "jarvis" ? jarvisName : (sk?.name ?? row.item.skill);
-      const color = row.item.skill === "jarvis" ? "var(--blue-deep)" : (sk?.color ?? OTHER_COLOR);
+      // "jarvis" is the overall-level key in ledgers written before the rename.
+      const overall = row.item.skill === "majordomo" || row.item.skill === "jarvis";
+      const name = overall ? majordomoName : (sk?.name ?? row.item.skill);
+      const color = overall ? "var(--blue-deep)" : (sk?.color ?? OTHER_COLOR);
       return (
         <div className="agent-row agent-row--levelup" title={fullTime(row.item.ts)}>
-          {row.item.skill === "jarvis" || !sk ? (
-            <Face id="jarvis" mood="idle" color={JARVIS_COLOR} size={20} badge={false} />
+          {overall || !sk ? (
+            <Face id="majordomo" mood="idle" color={MAJORDOMO_COLOR} size={20} badge={false} />
           ) : (
             <button className="badge badge--mini" aria-label="Open Skills" onClick={onSkills} style={{ background: `color-mix(in srgb, ${sk.color} 16%, transparent)` }}>
               <SkillIcon skill={sk} size={13} />
@@ -527,7 +529,7 @@ function RowView({
     case "digest":
       return (
         <div className="agent-row agent-row--digest" title={fullTime(row.item.ts)}>
-          <Face id="jarvis" mood="offline" color={JARVIS_COLOR} size={20} badge={false} />
+          <Face id="majordomo" mood="offline" color={MAJORDOMO_COLOR} size={20} badge={false} />
           <span className="agent-row__text">{row.item.text}</span>
           <button className="chip" onClick={(e) => onRef(`L${row.item.id}`, e)}>
             L{row.item.id}
@@ -602,7 +604,7 @@ function Pending({ receipts, onRef, name }: { receipts: Receipt[]; onRef: OnRef;
   return (
     <div className="msg msg--captain msg--first msg--pending" aria-label={`${name} is thinking`}>
       <div className="msg__face">
-        <Face id="jarvis" mood="working" color={JARVIS_COLOR} size={28} badge={false} />
+        <Face id="majordomo" mood="working" color={MAJORDOMO_COLOR} size={28} badge={false} />
       </div>
       <div className="msg__body">
         <div className="bubble bubble--captain bubble--dots">
@@ -897,8 +899,8 @@ function Composer({ onSend, name }: { onSend: (text: string) => Promise<void>; n
         el.setSelectionRange(el.value.length, el.value.length);
       });
     };
-    addEventListener("jarvis:prefill", on);
-    return () => removeEventListener("jarvis:prefill", on);
+    addEventListener("majordomo:prefill", on);
+    return () => removeEventListener("majordomo:prefill", on);
   }, []);
 
   useEffect(() => {

@@ -8,10 +8,10 @@ import { Memory, type LedgerEntry } from '../src/memory/store.ts'
 import { composeBrief, Supervisor } from '../src/agents/supervisor.ts'
 
 const FIX = join(import.meta.dirname, '../src/agents/fixtures')
-const socket = `jarvis-test-${process.pid}`
+const socket = `majordomo-test-${process.pid}`
 
 function setup() {
-  const dataDir = mkdtempSync(join(tmpdir(), 'jarvis-sup-'))
+  const dataDir = mkdtempSync(join(tmpdir(), 'majordomo-sup-'))
   writeFileSync(
     join(dataDir, 'runtimes.json'),
     JSON.stringify([
@@ -28,7 +28,7 @@ function setup() {
 }
 
 function gitRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'jarvis-repo-'))
+  const dir = mkdtempSync(join(tmpdir(), 'majordomo-repo-'))
   const git = (...args: string[]) => execFileSync('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@t', ...args])
   git('init', '-q', '-b', 'main')
   writeFileSync(join(dir, 'README.md'), 'hi\n')
@@ -96,11 +96,11 @@ describe('supervisor', () => {
     const repo = gitRepo()
     const t = mem.taskCreate({ title: 'Fix readme', goal: 'g' })
     const a = await sup.spawn({ id: 'fixer', runtime: 'menu', repo, brief: 'fix it', task_id: t.id })
-    expect(a).toMatchObject({ repo, branch: 'jarvis/fixer', cwd: join(dataDir, 'worktrees', 'fixer'), task_id: t.id })
+    expect(a).toMatchObject({ repo, branch: 'majordomo/fixer', cwd: join(dataDir, 'worktrees', 'fixer'), task_id: t.id })
     expect(existsSync(join(a.cwd, 'README.md'))).toBe(true)
     const auto = await until(() => events.find((e) => e.entry.meta?.event === 'auto'))
     expect(auto).toMatchObject({ wake: false })
-    expect(auto.entry.text).toBe("Jarvis accepted fixer's prompt: Yes, I trust this folder")
+    expect(auto.entry.text).toBe("Majordomo accepted fixer's prompt: Yes, I trust this folder")
     expect(events.some((e) => e.entry.meta?.event === 'needs')).toBe(false)
 
     // Removing keeps the branch, and refuses while there are uncommitted changes.
@@ -110,7 +110,7 @@ describe('supervisor', () => {
     execFileSync('rm', [join(a.cwd, 'new.txt')])
     await sup.stopAgent('fixer', true)
     expect(existsSync(a.cwd)).toBe(false)
-    expect(execFileSync('git', ['-C', repo, 'branch', '--list', 'jarvis/fixer']).toString()).toContain('jarvis/fixer')
+    expect(execFileSync('git', ['-C', repo, 'branch', '--list', 'majordomo/fixer']).toString()).toContain('majordomo/fixer')
     expect(mem.agentGet('fixer')?.status).toBe('removed')
     expect(sup.list().map((x) => x.id)).not.toContain('fixer')
   })
@@ -156,10 +156,10 @@ describe('supervisor', () => {
 
 describe('composeBrief', () => {
   it('tells a worktree agent its branch and how to report', () => {
-    const b = composeBrief({ id: 'fixer', task_id: 3, cwd: '/w', branch: 'jarvis/fixer', brief: 'Fix the bug.' }, 'Bug', 'Friday')
+    const b = composeBrief({ id: 'fixer', task_id: 3, cwd: '/w', branch: 'majordomo/fixer', brief: 'Fix the bug.' }, 'Bug', 'Friday')
     expect(b).toContain('Friday, the owner\'s assistant, gave you this job (task T3: Bug):')
     expect(b).toContain('Friday reads only your final message')
-    expect(b).toContain('on branch jarvis/fixer')
+    expect(b).toContain('on branch majordomo/fixer')
     expect(b).toContain('end your turn with a short report')
   })
 })

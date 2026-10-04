@@ -31,7 +31,7 @@ async function until(cond: () => boolean, ms = 3000) {
 }
 
 function setup(token?: string) {
-  const dataDir = mkdtempSync(join(tmpdir(), 'jarvis-srv-'))
+  const dataDir = mkdtempSync(join(tmpdir(), 'majordomo-srv-'))
   const cfg = loadConfig({ dataDir })
   const mem = new Memory(cfg.dbPath)
   const runner = new GatedRunner()
@@ -142,8 +142,8 @@ describe('web server', () => {
     expect((await app.request('/api/chat')).status).toBe(401)
     expect((await app.request('/api/chat', { headers: { authorization: 'Bearer s3cret' } })).status).toBe(200)
     const signin = await app.request('/?token=s3cret')
-    expect(signin.headers.get('set-cookie')).toMatch(/jarvis_token=s3cret; .*HttpOnly/)
-    expect((await app.request('/api/chat', { headers: { cookie: 'jarvis_token=s3cret' } })).status).toBe(200)
+    expect(signin.headers.get('set-cookie')).toMatch(/majordomo_token=s3cret; .*HttpOnly/)
+    expect((await app.request('/api/chat', { headers: { cookie: 'majordomo_token=s3cret' } })).status).toBe(200)
     close()
   })
 })
@@ -152,11 +152,11 @@ describe('web server with agents', () => {
   it('spawns through the API, wakes the captain on a report, and keeps silent replies out of the chat', { timeout: 30_000 }, async () => {
     const { Supervisor } = await import('../src/agents/supervisor.ts')
     const { writeFileSync } = await import('node:fs')
-    const dataDir = mkdtempSync(join(tmpdir(), 'jarvis-srv-agents-'))
+    const dataDir = mkdtempSync(join(tmpdir(), 'majordomo-srv-agents-'))
     writeFileSync(join(dataDir, 'runtimes.json'), JSON.stringify([{ id: 'fake', command: `bash ${join(import.meta.dirname, '../src/agents/fixtures/fake-agent.sh')}` }]))
     const cfg = loadConfig({ dataDir })
     const mem = new Memory(cfg.dbPath)
-    const socket = `jarvis-srv-${process.pid}`
+    const socket = `majordomo-srv-${process.pid}`
     const sup = new Supervisor({ mem, dataDir, socket, hook: null, pollMs: 100, timings: { briefSettleMs: 300 } })
     const runner = new GatedRunner()
     const { app, captain, close } = createApp({ mem, cfg, runner, supervisor: sup, selfUrl: 'http://127.0.0.1:1', pollMs: 50 })
@@ -174,7 +174,7 @@ describe('web server with agents', () => {
       const msg = runner.calls[0].message
       expect(msg).toMatch(/<agents note="live, from the supervisor">\ncounter \[\w+\] fake T1 - /)
       expect(msg).toMatch(/<agent_event id="L\d+" agent="counter" event="report"[^>]*>\ncounter reported:\nThere are 3 files\.\n<\/agent_event>/)
-      expect(runner.calls[0].mcpServers.jarvis.env.JARVIS_URL).toBe('http://127.0.0.1:1')
+      expect(runner.calls[0].mcpServers.majordomo.env.MAJORDOMO_URL).toBe('http://127.0.0.1:1')
       await runner.finish({ text: 'NOTHING_TO_REPORT' })
       await until(() => !captain.busy)
 
@@ -212,15 +212,15 @@ describe('web server with agents', () => {
 describe('static files', () => {
   it('never lets the page go stale, and caches hashed bundles forever', async () => {
     const { mkdirSync, writeFileSync } = await import('node:fs')
-    const web = mkdtempSync(join(tmpdir(), 'jarvis-web-'))
+    const web = mkdtempSync(join(tmpdir(), 'majordomo-web-'))
     mkdirSync(join(web, 'assets'))
-    writeFileSync(join(web, 'index.html'), '<title>Jarvis</title>')
+    writeFileSync(join(web, 'index.html'), '<title>Majordomo</title>')
     writeFileSync(join(web, 'assets', 'index-abc.js'), 'x')
-    const dataDir = mkdtempSync(join(tmpdir(), 'jarvis-srv-'))
+    const dataDir = mkdtempSync(join(tmpdir(), 'majordomo-srv-'))
     const cfg = loadConfig({ dataDir })
     const { app, close } = createApp({ mem: new Memory(cfg.dbPath), cfg, runner: new GatedRunner(), webRoot: web })
     const page = await app.request('/')
-    expect(await page.text()).toContain('Jarvis')
+    expect(await page.text()).toContain('Majordomo')
     expect(page.headers.get('cache-control')).toBe('no-cache')
     expect((await app.request('/some/route')).headers.get('cache-control')).toBe('no-cache')
     expect((await app.request('/assets/index-abc.js')).headers.get('cache-control')).toMatch(/immutable/)

@@ -1,6 +1,6 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning
-// Upgrades a Jarvis memory file to the current schema. Run by hand:
-//   node src/migrate.ts ~/.jarvis/memory.db
+// Upgrades a Majordomo memory file to the current schema. Run by hand:
+//   node src/migrate.ts ~/.majordomo/memory.db
 // It copies the file to <file>.bak-v<old> first, then applies each step in one transaction.
 import { copyFileSync, existsSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
@@ -14,7 +14,7 @@ if (!path || !existsSync(path)) {
 const db = new DatabaseSync(path)
 const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined
 const from = Number(row?.value ?? 0)
-if (!from) throw new Error(`${path} is not a Jarvis memory file`)
+if (!from) throw new Error(`${path} is not a Majordomo memory file`)
 if (from === SCHEMA_VERSION) {
   console.log(`${path} is already at v${SCHEMA_VERSION}`)
   process.exit(0)

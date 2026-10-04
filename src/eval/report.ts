@@ -137,7 +137,7 @@ export function renderReport(s: Summary): string {
   const row = (b: Bucket) =>
     `| ${b.name} | ${b.n} | **${b.accuracy}%** | ${b.outcomes.correct} | ${b.outcomes.stale} | ${b.outcomes.refused} | ${b.outcomes.wrong} | ${b.outcomes.hallucinated} |`
   return [
-    `# Jarvis long-run eval`,
+    `# Majordomo long-run eval`,
     '',
     `${s.done}/${s.setup.turns} turns, model ${s.setup.model}, seed ${s.setup.seed}, sleep every ${s.setup.sleepEvery} turns.`,
     '',

@@ -29,12 +29,12 @@ echo "  arch:   sudo pacman -S whois bind exiftool nmap"
 echo "  go:     go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest"
 echo "  pipx:   pipx install theHarvester"
 echo
-# Make the skill loadable by Jarvis's worker agents (Claude Code loads ~/.claude/skills).
+# Make the skill loadable by Majordomo's worker agents (Claude Code loads ~/.claude/skills).
 skill_root="$(cd "$here/.." && pwd)"
 dest="$HOME/.claude/skills/osint"
 mkdir -p "$HOME/.claude/skills"
 if [ -e "$dest" ] && [ ! -L "$dest" ]; then
-  echo "note: $dest exists and is not a symlink; leaving it. Point it at $skill_root yourself if you want the Jarvis version."
+  echo "note: $dest exists and is not a symlink; leaving it. Point it at $skill_root yourself if you want the Majordomo version."
 else
   ln -sfn "$skill_root" "$dest"
   echo "Linked skill into $dest (worker agents will load it)."

@@ -1,6 +1,6 @@
 // UI development and browser checks without spending tokens: the real server
 // and agent supervisor, with a scripted captain and scripted agents.
-//   JARVIS_DATA_DIR=/tmp/jarvis-demo node test/demo-server.ts
+//   MAJORDOMO_DATA_DIR=/tmp/majordomo-demo node test/demo-server.ts
 // In the chat: "remember ..." writes memory, "fail" fails a turn,
 // "spawn <name>" starts a fake agent, "ask <name>" starts one that shows a menu.
 import { serve } from '@hono/node-server'
@@ -26,7 +26,7 @@ const mem = new Memory(cfg.dbPath)
 const delay = Number(process.env.DEMO_DELAY_MS ?? 1500)
 const port = Number(process.env.PORT || 4788)
 const selfUrl = `http://127.0.0.1:${port}`
-const sup = new Supervisor({ mem, name: cfg.name, dataDir: cfg.dataDir, socket: 'jarvis-demo', hook: null })
+const sup = new Supervisor({ mem, name: cfg.name, dataDir: cfg.dataDir, socket: 'majordomo-demo', hook: null })
 sup.start()
 
 class DemoRunner implements Runner {

@@ -31,7 +31,7 @@ class FakeRunner implements Runner {
 }
 
 function setup(script?: Script, cfg = {}) {
-  const dataDir = mkdtempSync(join(tmpdir(), 'jarvis-cap-'))
+  const dataDir = mkdtempSync(join(tmpdir(), 'majordomo-cap-'))
   const config = loadConfig({ dataDir, ...cfg })
   const mem = new Memory(config.dbPath)
   const runner = new FakeRunner(mem, script)
@@ -46,12 +46,12 @@ describe('captain', () => {
     expect(a.sessionId).toBe(b.sessionId)
     expect(runner.calls.map((c) => c.resume)).toEqual([false, true])
     expect(mem.ledgerTail(10, ['owner', 'captain']).map((e) => `${e.kind}:${e.text}`)).toEqual(['owner:hello', 'captain:ok', 'owner:again', 'captain:ok'])
-    expect(runner.calls[0].mcpServers.jarvis.env).toMatchObject({ JARVIS_SESSION: a.sessionId })
+    expect(runner.calls[0].mcpServers.majordomo.env).toMatchObject({ MAJORDOMO_SESSION: a.sessionId })
   })
 
   it('primes a fresh session with Now, open tasks, conversation tail and recall; resumed turns stay lean', async () => {
     const { mem, runner, captain } = setup()
-    mem.nowUpdate('Goal: build Jarvis step 1. Why: one chat forever.')
+    mem.nowUpdate('Goal: build Majordomo step 1. Why: one chat forever.')
     mem.taskCreate({ title: 'Memory service', goal: 'durable memory' })
     mem.factWrite({ kind: 'decision', subject: 'memory backend', body: 'SQLite FTS5', source: 'owner' })
     await captain.handle('what memory backend did we choose?')

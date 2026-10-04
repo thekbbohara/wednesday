@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ClaudeRunner, parseResult } from '../src/captain/runner.ts'
 
-const dir = mkdtempSync(join(tmpdir(), 'jarvis-runner-'))
+const dir = mkdtempSync(join(tmpdir(), 'majordomo-runner-'))
 const bin = join(dir, 'claude')
 writeFileSync(
   bin,
@@ -25,13 +25,13 @@ describe('ClaudeRunner', () => {
   it('reads model and tools at call time, so settings apply to the next turn', async () => {
     const live = { model: 'haiku', tools: ['Read'] }
     const r = new ClaudeRunner({ bin, model: () => live.model, allowedTools: () => live.tools, cwd: dir, timeoutSec: 10 })
-    const req = { sessionId: 's', resume: false, message: 'hi', systemPrompt: 'p', mcpServers: { jarvis: { command: 'x', args: [], env: {} } } }
+    const req = { sessionId: 's', resume: false, message: 'hi', systemPrompt: 'p', mcpServers: { majordomo: { command: 'x', args: [], env: {} } } }
     const first = await r.run(req)
-    expect(JSON.parse(first.text)).toEqual({ model: 'haiku', tools: 'Read', allowed: 'mcp__jarvis,Read' })
+    expect(JSON.parse(first.text)).toEqual({ model: 'haiku', tools: 'Read', allowed: 'mcp__majordomo,Read' })
     expect(first).toMatchObject({ contextTokens: 115, contextWindow: 200000, isError: false })
     live.model = 'opus'
     live.tools = ['Read', 'WebSearch', 'WebFetch']
-    expect(JSON.parse((await r.run(req)).text)).toEqual({ model: 'opus', tools: 'Read,WebSearch,WebFetch', allowed: 'mcp__jarvis,Read,WebSearch,WebFetch' })
+    expect(JSON.parse((await r.run(req)).text)).toEqual({ model: 'opus', tools: 'Read,WebSearch,WebFetch', allowed: 'mcp__majordomo,Read,WebSearch,WebFetch' })
   })
 
   it('rejects output that is not claude JSON', () => {

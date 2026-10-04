@@ -36,7 +36,7 @@ export interface Status {
   agents: Agent[];
   model: string;
   lastReplyAt: string | null;
-  jarvis: Progress;
+  majordomo: Progress;
   skills: SkillView[];
   waiting: number;
 }

@@ -1,5 +1,5 @@
-// MCP server exposing Jarvis memory to the captain (stdio).
-// Env: JARVIS_DB (memory file), JARVIS_SESSION (captain session id, for the ledger).
+// MCP server exposing Majordomo memory to the captain (stdio).
+// Env: MAJORDOMO_DB (memory file), MAJORDOMO_SESSION (captain session id, for the ledger).
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
@@ -19,9 +19,9 @@ export function buildServer(mem: Memory, session: string | null, agentApi: Agent
   const checkSkill = (s: string) => {
     if (s !== 'none' && !liveIds().includes(s)) throw new Error(`unknown skill "${s}"; use one of: ${liveIds().join(', ')}, none (or add one with skill_add)`)
   }
-  const skillHelp = `Skill this work trains (earns Jarvis EXP when created and when finished): ${skills.map((s) => `${s.id} (${s.covers})`).join('; ')}. Use "none" only for chores that fit no skill.`
+  const skillHelp = `Skill this work trains (earns Majordomo EXP when created and when finished): ${skills.map((s) => `${s.id} (${s.covers})`).join('; ')}. Use "none" only for chores that fit no skill.`
   const skillArg = z.string().describe(skillHelp)
-  const server = new McpServer({ name: 'jarvis', version: '0.1.0' })
+  const server = new McpServer({ name: 'majordomo', version: '0.1.0' })
 
   const ok = (data: unknown) => ({ content: [{ type: 'text' as const, text: typeof data === 'string' ? data : JSON.stringify(data, null, 2) }] })
   const fail = (e: unknown) => ({ isError: true, content: [{ type: 'text' as const, text: e instanceof Error ? e.message : String(e) }] })
@@ -71,7 +71,7 @@ export function buildServer(mem: Memory, session: string | null, agentApi: Agent
         'One fact per call. If it replaces older facts, pass their ids in supersedes; they are marked stale.',
       inputSchema: {
         kind: z.enum(FACT_KINDS),
-        subject: z.string().min(1).max(120).describe('Short handle, e.g. "owner timezone" or "jarvis memory backend".'),
+        subject: z.string().min(1).max(120).describe('Short handle, e.g. "owner timezone" or "majordomo memory backend".'),
         body: z.string().min(1).max(1500),
         source: z.string().min(1).describe('Where it came from: a ledger id like L42, or "owner".'),
         supersedes: z.array(z.number().int()).optional(),
@@ -208,7 +208,7 @@ export function buildServer(mem: Memory, session: string | null, agentApi: Agent
 /** Agent tools talk to the web server, which runs the supervisor. */
 function registerAgentTools(server: McpServer, api: AgentApi | null) {
   const call = async (method: 'GET' | 'POST', path: string, body?: unknown) => {
-    if (!api) return { isError: true, content: [{ type: 'text' as const, text: 'Agents are unavailable: the Jarvis web server is not running (start it with `pnpm start`).' }] }
+    if (!api) return { isError: true, content: [{ type: 'text' as const, text: 'Agents are unavailable: the Majordomo web server is not running (start it with `pnpm start`).' }] }
     try {
       const res = await fetch(api.url + path, {
         method,
@@ -220,7 +220,7 @@ function registerAgentTools(server: McpServer, api: AgentApi | null) {
       if (!res.ok) return { isError: true, content: [{ type: 'text' as const, text: String(data.error ?? `${res.status} ${res.statusText}`) }] }
       return { content: [{ type: 'text' as const, text: typeof data.text === 'string' ? data.text : JSON.stringify(data, null, 2) }] }
     } catch (e) {
-      return { isError: true, content: [{ type: 'text' as const, text: `Could not reach the Jarvis server: ${(e as Error).message}` }] }
+      return { isError: true, content: [{ type: 'text' as const, text: `Could not reach the Majordomo server: ${(e as Error).message}` }] }
     }
   }
 
@@ -228,7 +228,7 @@ function registerAgentTools(server: McpServer, api: AgentApi | null) {
     'agent_spawn',
     {
       description:
-        'Start a worker agent on a job. For code work pass repo: the agent gets a fresh git worktree on its own branch (jarvis/<name> unless you pass branch, e.g. a Jira key). ' +
+        'Start a worker agent on a job. For code work pass repo: the agent gets a fresh git worktree on its own branch (majordomo/<name> unless you pass branch, e.g. a Jira key). ' +
         'For other work pass cwd. The brief is its whole job: goal, constraints, how to verify, what to report. Link it to a task. ' +
         'You are woken when it ends a turn, needs an answer, or dies; do not poll.',
       inputSchema: {
@@ -296,13 +296,13 @@ function fmtHit(h: Hit): string {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const db = process.env.JARVIS_DB
+  const db = process.env.MAJORDOMO_DB
   if (!db) {
-    console.error('JARVIS_DB is required')
+    console.error('MAJORDOMO_DB is required')
     process.exit(2)
   }
   const mem = new Memory(db)
-  const url = process.env.JARVIS_URL
-  const server = buildServer(mem, process.env.JARVIS_SESSION || null, url ? { url, token: process.env.JARVIS_TOKEN || undefined } : null, loadSkills(dirname(db)), dirname(db))
+  const url = process.env.MAJORDOMO_URL
+  const server = buildServer(mem, process.env.MAJORDOMO_SESSION || null, url ? { url, token: process.env.MAJORDOMO_TOKEN || undefined } : null, loadSkills(dirname(db)), dirname(db))
   await server.connect(new StdioServerTransport())
 }
