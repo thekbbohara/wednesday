@@ -2,9 +2,12 @@
 // override the env defaults, and apply to the next turn without a restart.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { ENGINES, type Engine } from './captain/provider.ts'
 import type { Config } from './config.ts'
 
 export interface Settings {
+  engine: Engine
+  engineModel: string
   model: string
   /** WebSearch and WebFetch for the captain. */
   web: boolean
@@ -21,6 +24,8 @@ const MODEL = /^[a-z0-9][a-z0-9.\-[\]]{1,60}$/
 
 export function currentSettings(cfg: Config): Settings {
   return {
+    engine: cfg.engine,
+    engineModel: cfg.engineModel,
     model: cfg.model,
     web: WEB_TOOLS.every((t) => cfg.allowedTools.includes(t)),
     rotateAt: cfg.rotateAt,
@@ -33,6 +38,8 @@ export function currentSettings(cfg: Config): Settings {
 /** Field -> reason, for every invalid value in the patch. */
 export function check(patch: Partial<Settings>): Record<string, string> {
   const errors: Record<string, string> = {}
+  if (patch.engine !== undefined && !ENGINES.includes(patch.engine)) errors.engine = 'Use claude, codex or kimi.'
+  if (patch.engineModel !== undefined && (typeof patch.engineModel !== 'string' || (patch.engineModel !== '' && !MODEL.test(patch.engineModel)))) errors.engineModel = 'Use a model id or empty for default.'
   if (patch.model !== undefined && !MODEL.test(String(patch.model))) errors.model = 'Use a model alias (opus, sonnet, haiku) or a full model id.'
   if (patch.sleepModel !== undefined && !MODEL.test(String(patch.sleepModel))) errors.sleepModel = 'Use a model alias (opus, sonnet, haiku) or a full model id.'
   if (patch.web !== undefined && typeof patch.web !== 'boolean') errors.web = 'On or off.'
@@ -46,6 +53,8 @@ export function check(patch: Partial<Settings>): Record<string, string> {
 
 /** Applies a checked patch to the live config. */
 export function apply(cfg: Config, patch: Partial<Settings>): void {
+  if (patch.engine !== undefined) cfg.engine = patch.engine
+  if (patch.engineModel !== undefined) cfg.engineModel = patch.engineModel
   if (patch.model !== undefined) cfg.model = patch.model
   if (patch.sleepModel !== undefined) cfg.sleepModel = patch.sleepModel
   if (patch.rotateAt !== undefined) cfg.rotateAt = patch.rotateAt
@@ -75,4 +84,13 @@ export function loadSettings(cfg: Config, log = console.warn): void {
 
 export function saveSettings(cfg: Config): void {
   writeFileSync(file(cfg), `${JSON.stringify(currentSettings(cfg), null, 2)}\n`)
+}
+
+export function parseEngineCommand(text: string): Partial<Settings> | null {
+  if (!/^\/engine(?:\s|$)/.test(text.trim())) return null
+  const [, engine, model, ...extra] = text.trim().split(/\s+/)
+  if (!engine) return {}
+  const patch = { engine: engine as Engine, engineModel: model ?? '' }
+  if (extra.length || Object.keys(check(patch)).length) throw new Error('Usage: /engine [claude|codex|kimi] [model]')
+  return patch
 }

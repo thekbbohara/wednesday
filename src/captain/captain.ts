@@ -6,10 +6,11 @@ import { fileURLToPath } from 'node:url'
 import type { Config } from '../config.ts'
 import { CLOSED_STATUSES, type LedgerEntry, type Memory, type TaskStatus } from '../memory/store.ts'
 import { withFileLock } from './lock.ts'
+import { loadSettings } from '../settings.ts'
 import { plainDash } from '../text.ts'
 import { buildTurnPrompt, handoffPrompt, newView, type SessionView } from './prompt.ts'
 import type { Runner, TurnResult } from './runner.ts'
-import { isUsageLimit, type Provider } from './provider.ts'
+import { isUsageLimit, selectedChain, type Provider } from './provider.ts'
 
 const MCP_SERVER = fileURLToPath(new URL('../mcp/server.ts', import.meta.url))
 export const SILENT = /^\s*NOTHING_TO_REPORT\W*$/
@@ -35,6 +36,7 @@ export class Captain {
   private runners = new Map<string, Runner>()
   /** Provider the current/next session runs on. */
   private providerId: string
+  private currentProvider: Provider
   /** Overridable in tests; cooldown math uses it. */
   clock: () => number = () => Date.now()
   private lockPath: string
@@ -50,6 +52,7 @@ export class Captain {
     this.mem = mem
     this.cfg = cfg
     this.runnerFor = runnerFor
+    this.currentProvider = cfg.captainChain[0]
     this.providerId = cfg.captainChain[0].id
     mkdirSync(cfg.dataDir, { recursive: true })
     this.lockPath = join(cfg.dataDir, 'captain.lock')
@@ -78,8 +81,7 @@ export class Captain {
   }
 
   /** Next provider to try: first in the chain, skipping ones tried this turn and ones cooling down. */
-  private pickProvider(tried: Set<string>): Provider | null {
-    const chain = this.cfg.captainChain
+  private pickProvider(tried: Set<string>, chain: Provider[]): Provider | null {
     const fresh = chain.filter((p) => !tried.has(p.id))
     if (!fresh.length) return null
     const cd = this.cooldowns()
@@ -98,6 +100,7 @@ export class Captain {
       this.view = newView()
       this.viewSession = null
     }
+    this.currentProvider = provider
     this.providerId = provider.id
   }
 
@@ -113,6 +116,7 @@ export class Captain {
         env: {
           MAJORDOMO_DB: this.cfg.dbPath,
           MAJORDOMO_SESSION: sessionId,
+          MAJORDOMO_DATA_DIR: this.cfg.dataDir,
           ...(this.agents ? { MAJORDOMO_URL: this.agents.url } : {}),
           ...(this.agents?.token ? { MAJORDOMO_TOKEN: this.agents.token } : {}),
         } as Record<string, string>,
@@ -206,9 +210,11 @@ export class Captain {
   }
 
   private async turn(inputs: LedgerEntry[]): Promise<Reply> {
+    loadSettings(this.cfg)
+    const providers = selectedChain(this.cfg.captainChain, this.cfg.engine, this.cfg.engineModel)
     const tried = new Set<string>()
     for (;;) {
-      const provider = this.pickProvider(tried)
+      const provider = this.pickProvider(tried, providers)
       if (!provider) {
         const e = this.failure(inputs, 'every captain provider is at its usage limit; try again later', null)
         return { text: e.text.replace(/^Captain turn failed: /, ''), ledgerId: e.id, sessionId: '', contextTokens: 0, contextWindow: null, error: true }
@@ -306,7 +312,7 @@ export class Captain {
     if (!cur) return
     if (cur.turns > 0) {
       const pid = this.mem.metaGet('captain_session_provider')
-      const provider = this.cfg.captainChain.find((p) => p.id === pid) ?? this.cfg.captainChain[0]
+      const provider = this.currentProvider.id === pid ? this.currentProvider : selectedChain(this.cfg.captainChain, this.cfg.engine, this.cfg.engineModel).find((p) => p.id === pid) ?? this.cfg.captainChain[0]
       const res = await this.call(this.runnerOf(provider), cur.id, true, handoffPrompt(reason))
       if (res.isError) this.mem.append('system', `Handoff turn failed: ${res.text}`, { session: cur.id })
     }

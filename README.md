@@ -84,6 +84,25 @@ padded with empty slots that start a new agent), and one big page card. Pages
   sleep time and model. Changes save to `<data>/settings.json`, win over the
   env defaults, and apply from the next message without a restart.
 
+### Captain engine
+
+Use `/engine` to see the selected engine, or `/engine claude`, `/engine codex`,
+`/engine kimi` to switch. Add a model as the second argument, for example
+`/engine codex gpt-5`. Omitting the model restores that engine's default.
+The chat input also has an engine selector. Plain-language requests use the
+captain's `captain_engine_set(engine, model?)` MCP tool.
+
+The engine and optional model persist in `<data>/settings.json` as `engine`
+and `engineModel`. The running turn finishes on its current engine; the next
+turn starts a fresh session with Now, facts and recent ledger context.
+Usage-limit fallback remains configurable with `MAJORDOMO_FALLBACKS`, for
+example `codex,kimi`. The selected engine leads the configured chain.
+Kimi uses the `kimi` command from `<data>/runtimes.json` (default `kimi`),
+with a dedicated captain home under `<data>/kimi-captain`. Its authentication
+and provider configuration are copied from `KIMI_CODE_HOME` or `~/.kimi-code`;
+its MCP servers and session workspaces are isolated from worker sessions.
+The Codex and Kimi CLIs must be installed and authenticated on the server.
+
 ### Skills and EXP
 
 Majordomo levels up by doing work. Every task is tagged with the skill it trains
@@ -243,30 +262,25 @@ Settings so the worker can search.
 
 ## Captain fallback chain
 
-The captain runs on the Claude Code harness. If your Claude login hits its
-usage limit, it fails over to the next provider in a chain, keeps going, and
-returns to the primary once the limit cools off. Set the chain in `.env`:
+The captain starts on the selected engine (Claude by default). On a usage
+limit it tries the configured fallback providers, then returns to the selected
+engine after its cooldown. Set fallbacks in `.env`:
 
 ```sh
-MAJORDOMO_FALLBACKS=claude:~/.claude-2,codex     # primary Claude is always first
+MAJORDOMO_FALLBACKS=claude:~/.claude-2,codex,kimi
 ```
 
-- `claude:<config dir>` - another Claude account (its own `CLAUDE_CONFIG_DIR`).
-  Same harness, so rotation, memory and token tracking keep working fully.
-- `codex[:model]` - the Codex CLI (a different provider entirely). Codex can be
-  a captain: it reaches the memory tools over MCP and resumes sessions. Two
-  caveats: it reports no context window, so on Codex the captain rotates on its
-  turn cap instead of context %; and it runs with
-  `--dangerously-bypass-approvals-and-sandbox` (the one automation flag `codex
-  exec` and `exec resume` share), which lets Codex run shell freely. It only
-  runs when you add `codex` to the chain and Claude is exhausted. If you are not
-  comfortable with that, leave Codex out and use extra Claude accounts instead.
+- `claude:<config dir>` - another Claude account with its own `CLAUDE_CONFIG_DIR`.
+- `codex[:model]` - Codex CLI with MCP tools and resumable sessions. It reports
+  no context window, so rotation uses the turn cap. It runs with
+  `--dangerously-bypass-approvals-and-sandbox`, allowing shell commands freely.
+- `kimi[:model]` - Kimi CLI with MCP tools and resumable sessions. It also uses
+  the turn cap for rotation.
 
-A switch is just a session rotation onto the next provider, rebuilt from
-memory. `kimi`, `opencode` and `agy` are not captain providers (no headless
-MCP); they remain worker runtimes. On a usage-limit error the current provider
-is put on cooldown (`MAJORDOMO_LIMIT_COOLDOWN_MIN`, default 180) and the next is
-tried; when all are limited the captain says so.
+A provider switch starts a fresh session rebuilt from memory. Usage-limit
+errors put that provider on cooldown (`MAJORDOMO_LIMIT_COOLDOWN_MIN`, default
+180), and the next provider is tried. When all are limited, the captain says so.
+`opencode` and `agy` remain worker runtimes.
 
 ## Multiple Claude accounts
 

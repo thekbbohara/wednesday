@@ -10,8 +10,11 @@ import { Memory } from './memory/store.ts'
 import { Captain, type Reply } from './captain/captain.ts'
 import { buildRunner } from './captain/chain.ts'
 
+import { loadSettings, parseEngineCommand, apply, saveSettings } from './settings.ts'
+
 const cfg = loadConfig()
 mkdirSync(cfg.dataDir, { recursive: true })
+loadSettings(cfg)
 const mem = new Memory(cfg.dbPath, { nowBudgetChars: cfg.nowBudgetChars })
 const captain = new Captain(mem, cfg, (p) => buildRunner(p, cfg))
 
@@ -24,9 +27,18 @@ function status(r: Reply): string {
   return dim(`[L${r.ledgerId}${pct}${r.rotated ? ` - session rotated: ${r.rotated}` : ''}]`)
 }
 
-const HELP = `/now  /tasks  /facts  /search <words>  /get <F1|T1|L1>  /rotate  /sessions  /help  /quit`
+const HELP = `/now  /tasks  /facts  /search <words>  /get <F1|T1|L1>  /rotate  /sessions  /engine [claude|codex|kimi] [model]  /help  /quit`
 
 async function command(line: string): Promise<boolean> {
+  try {
+    const engine = parseEngineCommand(line)
+    if (engine) {
+      apply(cfg, engine)
+      if (Object.keys(engine).length) saveSettings(cfg)
+      console.log(`Captain engine: ${cfg.engine}${cfg.engineModel ? ` (${cfg.engineModel})` : ''}`)
+      return true
+    }
+  } catch (e) { console.log((e as Error).message); return true }
   const [cmd, ...rest] = line.slice(1).split(/\s+/)
   const arg = rest.join(' ')
   switch (cmd) {
@@ -70,6 +82,7 @@ if (process.argv[2] === 'ask') {
     console.error('usage: majordomo ask "message"')
     process.exit(2)
   }
+  if (/^\/engine(?:\s|$)/.test(text)) { await command(text); mem.close(); process.exit(0) }
   const r = await captain.handle(text)
   console.log(r.text)
   console.error(status(r))

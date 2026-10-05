@@ -18,7 +18,8 @@ type Receipt = Extract<ChatItem, { type: "receipt" }>;
 export function App() {
   const [items, setItems] = useState<ChatItem[]>([]);
   const [hasMore, setHasMore] = useState(false);
-  const [status, setStatus] = useState<Status>({ name: "Majordomo", thinking: false, agents: [], model: "", lastReplyAt: null, majordomo: { level: 1, exp: 0, floor: 0, next: 300 }, skills: [], waiting: 0 });
+  const [status, setStatus] = useState<Status>({
+    engine: "claude", name: "Majordomo", thinking: false, agents: [], model: "", lastReplyAt: null, majordomo: { level: 1, exp: 0, floor: 0, next: 300 }, skills: [], waiting: 0 });
   const [page, goPage] = usePage();
   // Bumps on every ledger change, so open pages refresh themselves.
   const [version, setVersion] = useState(0);
@@ -224,7 +225,7 @@ export function App() {
                   New messages
                 </button>
               )}
-              <Composer onSend={send} name={status.name} />
+              <Composer onSend={send} name={status.name} engine={status.engine} />
             </footer>
           </div>
           {page === "skills" && (
@@ -861,7 +862,7 @@ function AgentBody({ id, onRef }: { id: string; onRef: OnRef }) {
   );
 }
 
-function Composer({ onSend, name }: { onSend: (text: string) => Promise<void>; name: string }) {
+function Composer({ onSend, name, engine }: { onSend: (text: string) => Promise<void>; name: string; engine: string }) {
   const [text, setText] = useState(() => {
     try {
       return localStorage.getItem(DRAFT_KEY) ?? "";
@@ -935,6 +936,9 @@ function Composer({ onSend, name }: { onSend: (text: string) => Promise<void>; n
 
   return (
     <div className="composer-wrap">
+      <label className="composer__engine">Engine <select aria-label="Captain engine" value={engine} onChange={(e) => { void onSend(`/engine ${e.target.value}`).catch((e) => setErr(e.message)); }}>
+        {['claude', 'codex', 'kimi'].map((value) => <option key={value} value={value}>{value}</option>)}
+      </select></label>
       {err && <p className="composer__err">{err}</p>}
       <form
         className="composer"

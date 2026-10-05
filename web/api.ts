@@ -34,6 +34,7 @@ export interface Status {
   name: string;
   thinking: boolean;
   agents: Agent[];
+  engine: "claude" | "codex" | "kimi";
   model: string;
   lastReplyAt: string | null;
   majordomo: Progress;
@@ -90,6 +91,8 @@ export interface Hit {
 }
 
 export interface Settings {
+  engineModel: string;
+  engine: "claude" | "codex" | "kimi";
   model: string;
   web: boolean;
   rotateAt: number;

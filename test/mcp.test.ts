@@ -2,7 +2,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -22,7 +22,7 @@ beforeAll(async () => {
     new StdioClientTransport({
       command: process.execPath,
       args: ['--disable-warning=ExperimentalWarning', SERVER],
-      env: { ...process.env, MAJORDOMO_DB: db, MAJORDOMO_SESSION: 'sess-1' } as Record<string, string>,
+      env: { ...process.env, MAJORDOMO_URL: '', MAJORDOMO_TOKEN: '', MAJORDOMO_DB: db, MAJORDOMO_SESSION: 'sess-1' } as Record<string, string>,
     }),
   )
 })
@@ -42,6 +42,7 @@ describe('majordomo MCP server', () => {
         'agent_send',
         'agent_spawn',
         'agent_stop',
+        'captain_engine_set',
         'fact_mark_stale',
         'log_decision',
         'memory_get',
@@ -94,6 +95,12 @@ describe('majordomo MCP server', () => {
     expect(mem.ledgerTail(20, ['system']).some((e) => (e.meta?.skill_new as { id?: string } | undefined)?.id === 'osint')).toBe(true)
     expect(mem.expBySkill().get('osint')).toBe(5)
     mem.close()
+  })
+
+  it('persists an engine switch without requiring a web server', async () => {
+    const r = await call('captain_engine_set', { engine: 'kimi', model: 'kimi-for-coding' })
+    expect(r.isError).not.toBe(true)
+    expect(JSON.parse(readFileSync(join(db, '..', 'settings.json'), 'utf8'))).toMatchObject({ engine: 'kimi', engineModel: 'kimi-for-coding' })
   })
 
   it('reports errors as tool errors, not crashes', async () => {

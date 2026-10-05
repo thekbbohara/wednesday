@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { parseChain, type Provider } from './captain/provider.ts'
+import { parseChain, type Engine, type Provider } from './captain/provider.ts'
 
 export interface Config {
   /** The assistant's display name, shown in the UI, prompts and agent briefs. */
@@ -10,6 +10,8 @@ export interface Config {
   dbPath: string
   /** Claude CLI binary. */
   claudeBin: string
+  engine: Engine
+  engineModel: string
   model: string
   /** Rotate once the session's context passes this fraction of its window. */
   rotateAt: number
@@ -61,6 +63,8 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     dataDir,
     dbPath: join(dataDir, 'memory.db'),
     claudeBin: env.MAJORDOMO_CLAUDE_BIN || 'claude',
+    engine: 'claude',
+    engineModel: '',
     model: env.MAJORDOMO_MODEL || 'opus',
     rotateAt: num('MAJORDOMO_ROTATE_AT', 0.4),
     maxTurns: num('MAJORDOMO_MAX_TURNS', 40),

@@ -5,6 +5,8 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { fileURLToPath } from 'node:url'
 import { dirname } from 'node:path'
+import { loadConfig } from '../config.ts'
+import { apply, check, loadSettings, saveSettings } from '../settings.ts'
 import { addSkill, DEFAULT_SKILLS, loadSkills, type Skill } from '../skills/skills.ts'
 import { FACT_KINDS, Memory, TASK_STATUSES, type Hit } from '../memory/store.ts'
 
@@ -201,12 +203,12 @@ export function buildServer(mem: Memory, session: string | null, agentApi: Agent
     guard(({ decision, reason }) => `Logged L${mem.append('decision', `Decision: ${decision}. Reason: ${reason}`, { session }).id}.`),
   )
 
-  registerAgentTools(server, agentApi)
+  registerAgentTools(server, agentApi, skillsDir)
   return server
 }
 
 /** Agent tools talk to the web server, which runs the supervisor. */
-function registerAgentTools(server: McpServer, api: AgentApi | null) {
+function registerAgentTools(server: McpServer, api: AgentApi | null, settingsDir?: string) {
   const call = async (method: 'GET' | 'POST', path: string, body?: unknown) => {
     if (!api) return { isError: true, content: [{ type: 'text' as const, text: 'Agents are unavailable: the Majordomo web server is not running (start it with `pnpm start`).' }] }
     try {
@@ -223,6 +225,22 @@ function registerAgentTools(server: McpServer, api: AgentApi | null) {
       return { isError: true, content: [{ type: 'text' as const, text: `Could not reach the Majordomo server: ${(e as Error).message}` }] }
     }
   }
+
+  server.registerTool('captain_engine_set', {
+    description: 'Switch the captain engine when the owner requests it. Starts a fresh memory-backed session at the next turn boundary.',
+    inputSchema: { engine: z.enum(['claude', 'codex', 'kimi']), model: z.string().optional() },
+  }, async ({ engine, model }) => {
+    if (api) return call('POST', '/api/captain/engine', { engine, model })
+    if (!settingsDir) return { isError: true, content: [{ type: 'text' as const, text: 'Captain settings directory is unavailable.' }] }
+    const cfg = loadConfig({ dataDir: settingsDir })
+    loadSettings(cfg)
+    const patch = { engine, engineModel: model ?? '' }
+    const errors = check(patch)
+    if (Object.keys(errors).length) return { isError: true, content: [{ type: 'text' as const, text: JSON.stringify(errors) }] }
+    apply(cfg, patch)
+    saveSettings(cfg)
+    return { content: [{ type: 'text' as const, text: 'Engine selected; applies at the next turn.' }] }
+  })
 
   server.registerTool(
     'agent_spawn',

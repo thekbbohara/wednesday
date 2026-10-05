@@ -17,7 +17,7 @@ import { Supervisor, SupervisorError, type AgentView } from './agents/supervisor
 import type { LedgerEntry } from './memory/store.ts'
 import { ClaudeSleepModel } from './sleep/sleep.ts'
 import { loadSkills, type Skill } from './skills/skills.ts'
-import { apply, check, currentSettings, loadSettings, MODELS, saveSettings, type Settings } from './settings.ts'
+import { apply, check, parseEngineCommand, currentSettings, loadSettings, MODELS, saveSettings, type Settings } from './settings.ts'
 import { EXP_RULES, OVERALL_SCALE, progress, type Progress } from './skills/levels.ts'
 import { startSleepSchedule } from './sleep/schedule.ts'
 
@@ -33,6 +33,7 @@ export interface Agent {
 export interface SkillView extends Skill, Progress {}
 
 export interface Status {
+  engine: Config['engine']
   name: string
   thinking: boolean
   agents: Agent[]
@@ -70,8 +71,8 @@ export function createApp(opts: {
   // A single runner (tests/demo) is used for every provider; otherwise build per provider.
   const runnerFor = opts.runnerFor ?? (opts.runner ? () => opts.runner! : (p: Provider) => buildRunner(p, cfg))
   const captain = new Captain(mem, cfg, runnerFor)
+  if (opts.selfUrl) captain.agents = { summary: () => sup?.summary() ?? '', url: opts.selfUrl, token }
   if (sup && opts.selfUrl) {
-    captain.agents = { summary: () => sup.summary(), url: opts.selfUrl, token }
     // Zero-token supervision: the captain only runs when an agent needs it.
     sup.on('event', (entry: LedgerEntry, wake: boolean) => {
       if (wake) captain.enqueue(entry)
@@ -99,7 +100,8 @@ export function createApp(opts: {
       name: cfg.name,
       thinking: captain.busy || existsSync(lockPath),
       agents: sup ? sup.list().map(toAgent) : (opts.agents?.() ?? []),
-      model: cfg.model,
+      engine: cfg.engine,
+      model: cfg.engineModel || (cfg.engine === 'claude' ? cfg.model : cfg.captainChain.find((p) => p.kind === cfg.engine)?.model || 'default'),
       lastReplyAt: lastReply(),
       majordomo: progress(total, OVERALL_SCALE),
       skills: currentSkills().map((sk) => ({ ...sk, ...progress(exp.get(sk.id) ?? 0) })),
@@ -154,7 +156,14 @@ export function createApp(opts: {
     if (!text) return c.json({ error: 'empty message' }, 400)
     if (text.length > MAX_MESSAGE_CHARS) return c.json({ error: `message is over ${MAX_MESSAGE_CHARS} characters` }, 413)
     const owner = captain.receive(text)
-    captain.enqueue(owner)
+    try {
+      const patch = parseEngineCommand(text)
+      if (patch) {
+        apply(cfg, patch)
+        if (opts.persistSettings && Object.keys(patch).length) saveSettings(cfg)
+        mem.append('captain', `Captain engine: ${cfg.engine}${cfg.engineModel ? ` (${cfg.engineModel})` : ''}. Applies at the next turn.`)
+      } else captain.enqueue(owner)
+    } catch (e) { mem.append('captain', (e as Error).message) }
     tick()
     return c.json({ item: toChatItem(owner) })
   })
@@ -189,6 +198,17 @@ export function createApp(opts: {
     if (q) return c.json({ query: q, hits: mem.search(q, { limit: 20, includeStale: true }) })
     const digests = mem.ledgerTail(60, ['digest']).reverse().map((d) => ({ id: d.id, ts: d.ts, date: String(d.meta?.date ?? d.ts.slice(0, 10)), text: d.text }))
     return c.json({ now: mem.nowGet(), facts: mem.factsAll(true).reverse(), digests })
+  })
+
+  app.post('/api/captain/engine', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const patch = { engine: body?.engine, engineModel: body?.model ?? '' }
+    const errors = check(patch)
+    if (!body?.engine || Object.keys(errors).length) return c.json({ error: 'Use claude, codex or kimi and a valid model.' }, 400)
+    apply(cfg, patch)
+    if (opts.persistSettings) saveSettings(cfg)
+    tick()
+    return c.json({ settings: currentSettings(cfg), text: 'Engine selected; applies at the next turn.' })
   })
 
   app.get('/api/settings', (c) =>
