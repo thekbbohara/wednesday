@@ -219,6 +219,20 @@ Runtimes are configured like agent-hq's, in `<data>/runtimes.json`:
 [{ "id": "claude-code", "command": "claude --model sonnet --permission-mode auto" }]
 ```
 
+Codex workers default to `codex --dangerously-bypass-approvals-and-sandbox`,
+matching the captain: full filesystem/network access and no command approvals.
+To use a restricted worker policy, override its command, for example:
+
+```json
+[{ "id": "codex", "command": "codex --sandbox workspace-write --ask-for-approval on-request" }]
+```
+
+Runtime commands are loaded when Majordomo starts. Changes apply to future
+workers after the next planned restart; running workers keep their session
+permissions. To change an existing Codex session while idle, use `/permissions`
+and select the full access preset, then confirm it. Do not interrupt an active
+turn just to change permissions.
+
 ## OSINT
 
 Majordomo runs open-source intelligence and relationship research for your own
