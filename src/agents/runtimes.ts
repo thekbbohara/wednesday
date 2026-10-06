@@ -14,10 +14,12 @@ export interface Runtime {
 }
 
 // Workers run unattended, so Claude Code uses auto mode: routine actions are
-// approved by its classifier and risky ones still stop at a prompt.
+// approved by its classifier and risky ones still stop at a prompt. Codex uses
+// full access with no approvals, matching the captain. Override command below
+// in runtimes.json to choose a different policy.
 const DEFAULT_RUNTIMES: Runtime[] = [
   { id: 'claude-code', label: 'Claude Code', command: 'claude --permission-mode auto', interrupt: ['Escape'], turnHook: 'claude' },
-  { id: 'codex', label: 'Codex', command: 'codex', interrupt: ['Escape'], turnHook: 'codex' },
+  { id: 'codex', label: 'Codex', command: 'codex --dangerously-bypass-approvals-and-sandbox', interrupt: ['Escape'], turnHook: 'codex' },
   { id: 'pi', label: 'pi', command: 'pi', interrupt: ['Escape'] },
   { id: 'kimi', label: 'Kimi', command: 'kimi', interrupt: ['Escape'] },
   { id: 'opencode', label: 'opencode', command: 'opencode', interrupt: ['Escape'] },
