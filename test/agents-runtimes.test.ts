@@ -22,7 +22,7 @@ describe('Codex worker permissions', () => {
     await sup.spawn({ id: 'testcodex', runtime: 'codex', cwd: dataDir, brief: 'test' })
     expect(start).toHaveBeenCalledWith(
       'majordomo_testcodex', dataDir,
-      expect.stringMatching(/^codex --dangerously-bypass-approvals-and-sandbox -c .*notify=/),
+      expect.stringMatching(/^(unset CLAUDE_CONFIG_DIR; )?codex --dangerously-bypass-approvals-and-sandbox -c .*notify=/),
       { MAJORDOMO_AGENT: 'testcodex', MAJORDOMO_URL: 'http://localhost:4788' },
     )
   })
