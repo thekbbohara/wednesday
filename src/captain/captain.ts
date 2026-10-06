@@ -10,7 +10,7 @@ import { loadSettings } from '../settings.ts'
 import { plainDash } from '../text.ts'
 import { buildTurnPrompt, handoffPrompt, newView, type SessionView } from './prompt.ts'
 import type { Runner, TurnResult } from './runner.ts'
-import { isUsageLimit, selectedChain, type Provider } from './provider.ts'
+import { isUsageLimit, primaryChain, selectedChain, type Provider } from './provider.ts'
 
 const MCP_SERVER = fileURLToPath(new URL('../mcp/server.ts', import.meta.url))
 export const SILENT = /^\s*NOTHING_TO_REPORT\W*$/
@@ -52,10 +52,15 @@ export class Captain {
     this.mem = mem
     this.cfg = cfg
     this.runnerFor = runnerFor
-    this.currentProvider = cfg.captainChain[0]
-    this.providerId = cfg.captainChain[0].id
+    this.currentProvider = this.chainNow()[0]
+    this.providerId = this.currentProvider.id
     mkdirSync(cfg.dataDir, { recursive: true })
     this.lockPath = join(cfg.dataDir, 'captain.lock')
+  }
+
+  /** The configured chain, its primary on the Claude account set right now. */
+  private chainNow(): Provider[] {
+    return primaryChain(this.cfg.captainChain, this.cfg.claudeConfigDir)
   }
 
   private runnerOf(p: Provider): Runner {
@@ -211,7 +216,7 @@ export class Captain {
 
   private async turn(inputs: LedgerEntry[]): Promise<Reply> {
     loadSettings(this.cfg)
-    const providers = selectedChain(this.cfg.captainChain, this.cfg.engine, this.cfg.engineModel)
+    const providers = selectedChain(this.chainNow(), this.cfg.engine, this.cfg.engineModel)
     const tried = new Set<string>()
     for (;;) {
       const provider = this.pickProvider(tried, providers)
@@ -258,7 +263,7 @@ export class Captain {
         session: s.id,
         meta: {
           ...(silent ? { silent: true } : {}),
-          ...(provider.id !== this.cfg.captainChain[0].id ? { provider: provider.id } : {}),
+          ...(provider.id !== this.chainNow()[0].id ? { provider: provider.id } : {}),
           reply_to: inputs.map((o) => o.id),
           context_tokens: res.contextTokens,
           context_window: res.contextWindow,
@@ -312,7 +317,7 @@ export class Captain {
     if (!cur) return
     if (cur.turns > 0) {
       const pid = this.mem.metaGet('captain_session_provider')
-      const provider = this.currentProvider.id === pid ? this.currentProvider : selectedChain(this.cfg.captainChain, this.cfg.engine, this.cfg.engineModel).find((p) => p.id === pid) ?? this.cfg.captainChain[0]
+      const provider = this.currentProvider.id === pid ? this.currentProvider : selectedChain(this.chainNow(), this.cfg.engine, this.cfg.engineModel).find((p) => p.id === pid) ?? this.chainNow()[0]
       const res = await this.call(this.runnerOf(provider), cur.id, true, handoffPrompt(reason))
       if (res.isError) this.mem.append('system', `Handoff turn failed: ${res.text}`, { session: cur.id })
     }

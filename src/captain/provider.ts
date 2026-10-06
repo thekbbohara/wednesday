@@ -21,8 +21,15 @@ export interface Provider {
 
 const expand = (p: string) => resolve(p.trim().replace(/^~(?=$|\/)/, homedir()))
 
+/** The primary Claude login: the default one, or the account in `configDir`. */
+export function claudePrimary(configDir?: string): Provider {
+  if (!configDir) return { id: 'claude', kind: 'claude', label: 'Claude' }
+  const dir = expand(configDir)
+  return { id: `claude@${basename(dir)}`, kind: 'claude', label: `Claude (${basename(dir).replace(/^\./, '')})`, configDir: dir }
+}
+
 export function parseChain(fallbacks: string | undefined, primaryConfigDir?: string): Provider[] {
-  const chain: Provider[] = [{ id: 'claude', kind: 'claude', label: 'Claude', ...(primaryConfigDir ? { configDir: expand(primaryConfigDir) } : {}) }]
+  const chain: Provider[] = [claudePrimary(primaryConfigDir)]
   for (const raw of (fallbacks ?? '').split(',').map((s) => s.trim()).filter(Boolean)) {
     const [kind, ...rest] = raw.split(':')
     const arg = rest.join(':').trim()
@@ -36,8 +43,21 @@ export function parseChain(fallbacks: string | undefined, primaryConfigDir?: str
       throw new Error(`MAJORDOMO_FALLBACKS: unknown entry "${raw}" (use claude:<config dir> or codex[:model] or kimi[:model])`)
     }
   }
+  return dedupe(chain)
+}
+
+function dedupe(chain: Provider[]): Provider[] {
   const seen = new Set<string>()
   return chain.filter((p) => !seen.has(p.id) && seen.add(p.id))
+}
+
+/**
+ * The chain with its primary on the account currently set (the claudeConfigDir
+ * setting), so a change applies at the next turn. Each account has its own id,
+ * so its sessions, runner and usage-limit cooldown stay its own.
+ */
+export function primaryChain(chain: Provider[], configDir: string): Provider[] {
+  return dedupe([claudePrimary(configDir), ...chain.slice(1)])
 }
 
 /** A plan/usage cap or rate limit: worth switching provider. Transient overload is not. */
@@ -48,6 +68,7 @@ export function isUsageLimit(text: string): boolean {
 /** Selected engine first, followed by configured fallbacks. */
 export function selectedChain(chain: Provider[], engine: Engine, model = ''): Provider[] {
   const base = chain.find((p) => p.kind === engine) ?? { id: engine, kind: engine, label: engine }
-  const primary = { ...base, id: model ? `${engine}:${model}` : base.id, ...(model ? { model } : {}) }
+  // A Claude account keeps its own id under a model override: sessions do not carry across accounts.
+  const primary = { ...base, id: model ? `${base.configDir ? base.id : engine}:${model}` : base.id, ...(model ? { model } : {}) }
   return [primary, ...chain.filter((p) => p.id !== primary.id && p.id !== base.id)]
 }

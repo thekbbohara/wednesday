@@ -295,7 +295,22 @@ Add a second account:
 CLAUDE_CONFIG_DIR=~/.claude-work claude    # then /login in it; ~/.claude is untouched
 ```
 
-Give a Majordomo worker runtime its own account in `<data>/runtimes.json`, so the
+Pick the account every Claude run uses (the captain's Claude engine, the
+nightly sleep and claude-code workers) under Settings > Claude account, or in
+`<data>/settings.json`:
+
+```json
+{ "claudeConfigDir": "~/.claude-work" }
+```
+
+Empty means the default login (`~/.claude`). The folder must exist; Settings
+shows whether it is logged in. A change applies at the captain's next turn (on a
+fresh session, since sessions live in the account's folder), the next sleep and
+the next worker spawn, without a restart. Its default is `CLAUDE_CONFIG_DIR`
+from the server's environment. `MAJORDOMO_FALLBACKS` entries keep their own
+accounts, so `claude:~/.claude` makes the default login a fallback.
+
+Give one worker runtime a different account in `<data>/runtimes.json`, so the
 captain can delegate to it (and you spread rate limits across accounts):
 
 ```json
@@ -305,7 +320,7 @@ captain can delegate to it (and you spread rate limits across accounts):
 ]
 ```
 
-The captain keeps using the default `~/.claude`. For non-interactive auth
+A runtime's own `CLAUDE_CONFIG_DIR` wins over the setting. For non-interactive auth
 instead of a login, `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` also work.
 In Docker, mount each extra config dir the same way `~/.claude` is mounted.
 

@@ -4,6 +4,7 @@
 // digest is appended to the ledger, where it can be searched and cited.
 import { spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { claudeEnv } from '../claude-account.ts'
 import { FACT_KINDS, type Fact, type FactKind, type LedgerEntry, type Memory } from '../memory/store.ts'
 
 export const SLEEP_SESSION = 'sleep'
@@ -54,11 +55,23 @@ export interface SleepModel {
   consolidate(prompt: string): Promise<SleepOps>
 }
 
+export interface ClaudeSleepOptions {
+  bin: string
+  /** A value, or a getter so a settings change applies to the next sleep. */
+  model: string | (() => string)
+  promptFile: string
+  timeoutSec: number
+  cwd: string
+  name?: string
+  /** The Claude account's CLAUDE_CONFIG_DIR, or a getter for it; empty = the default login. */
+  configDir?: string | (() => string)
+}
+
 /** Headless Claude Code with schema-checked output; no tools, no session kept. */
 export class ClaudeSleepModel implements SleepModel {
-  private opts: { bin: string; model: string | (() => string); promptFile: string; timeoutSec: number; cwd: string; name?: string }
+  private opts: ClaudeSleepOptions
 
-  constructor(opts: { bin: string; model: string | (() => string); promptFile: string; timeoutSec: number; cwd: string; name?: string }) {
+  constructor(opts: ClaudeSleepOptions) {
     this.opts = opts
   }
 
@@ -75,7 +88,8 @@ export class ClaudeSleepModel implements SleepModel {
       '--json-schema', JSON.stringify(OPS_SCHEMA),
     ]
     return new Promise((resolve, reject) => {
-      const child = spawn(this.opts.bin, args, { cwd: this.opts.cwd, stdio: ['pipe', 'pipe', 'pipe'] })
+      const dir = typeof this.opts.configDir === 'function' ? this.opts.configDir() : (this.opts.configDir ?? '')
+      const child = spawn(this.opts.bin, args, { cwd: this.opts.cwd, stdio: ['pipe', 'pipe', 'pipe'], env: claudeEnv(dir) })
       let out = ''
       let err = ''
       const timer = setTimeout(() => child.kill('SIGTERM'), this.opts.timeoutSec * 1000)

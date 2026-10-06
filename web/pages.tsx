@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
-import { api, RUNTIME_COLOR, type ExpEvent, type Fact, type Hit, type Settings, type SkillView, type TaskRow } from "./api";
+import { api, RUNTIME_COLOR, type ClaudeAccount, type ExpEvent, type Fact, type Hit, type Settings, type SkillView, type TaskRow } from "./api";
 import { Cited } from "./Cited";
 import { Face } from "./Face";
 import { ExpBar, SkillIcon } from "./Skills";
@@ -386,12 +386,16 @@ function SearchResults({ hits, onRef }: { hits: Hit[]; onRef: OnRef }) {
 export function SettingsPage({ name }: { name: string }) {
   const { data, error } = useLoad(api.settings, 0);
   const [s, setS] = useState<Settings | null>(null);
+  const [account, setAccount] = useState<ClaudeAccount | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
-    if (data) setS(data.settings);
+    if (data) {
+      setS(data.settings);
+      setAccount(data.claudeAccount);
+    }
   }, [data]);
 
   const save = async (patch: Partial<Settings>) => {
@@ -399,7 +403,8 @@ export function SettingsPage({ name }: { name: string }) {
     setS((cur) => (cur ? { ...cur, ...patch } : cur));
     try {
       const next = await api.saveSettings(patch);
-      setS(next);
+      setS(next.settings);
+      setAccount(next.claudeAccount);
       setErrors((e) => ({ ...e, [key]: "" }));
       setSaved(key);
       clearTimeout(timer.current);
@@ -420,13 +425,14 @@ export function SettingsPage({ name }: { name: string }) {
     );
 
   const models = [...new Set([...data.models, s.model, s.sleepModel])];
-  const row = (key: keyof Settings, label: string, hint: string, control: ReactNode) => (
+  const row = (key: keyof Settings, label: string, hint: string, control: ReactNode, extra?: ReactNode) => (
     <div className="setting">
       <div className="setting__text">
         <label className="setting__label" htmlFor={`set-${key}`}>
           {label}
         </label>
         <p className="setting__hint">{hint}</p>
+        {extra}
         {errors[key] && <p className="setting__error">{errors[key]}</p>}
       </div>
       <div className="setting__control">
@@ -444,6 +450,25 @@ export function SettingsPage({ name }: { name: string }) {
       <div className="page__body">
         <div className="settings">
           <p className="micro">Captain</p>
+          {row(
+            "engine",
+            "Engine",
+            `The CLI ${name} runs on. Applies from the next message.`,
+            <select id="set-engine" name="engine" className="select" value={s.engine} onChange={(e) => save({ engine: e.target.value as Settings["engine"], engineModel: "" })}>
+              {["claude", "codex", "kimi"].map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>,
+          )}
+          {row(
+            "claudeConfigDir",
+            "Claude account",
+            `Config folder every Claude run uses: ${name}, the nightly sleep and new claude-code agents. Empty for the default login.`,
+            <PathField id="set-claudeConfigDir" value={s.claudeConfigDir} placeholder="~/.claude" onCommit={(claudeConfigDir) => save({ claudeConfigDir })} />,
+            account && !errors.claudeConfigDir && <AccountLine account={account} />,
+          )}
           {row(
             "model",
             "Model",
@@ -547,6 +572,39 @@ function Toggle({ id, on, onChange, label }: { id: string; on: boolean; onChange
     <button id={id} role="switch" aria-checked={on} aria-label={label} className={`toggle${on ? " is-on" : ""}`} onClick={() => onChange(!on)}>
       <span />
     </button>
+  );
+}
+
+function AccountLine({ account }: { account: ClaudeAccount }) {
+  const state = !account.exists ? "missing" : account.loggedIn ? "on" : "off";
+  return (
+    <p className={`setting__account is-${state}`}>
+      <span className="setting__dot" aria-hidden="true" />
+      <span className="mono">{account.dir}</span>
+      <span>{!account.exists ? "folder missing" : account.loggedIn ? (account.email ?? "logged in") : "not logged in"}</span>
+    </p>
+  );
+}
+
+function PathField({ id, value, placeholder, onCommit }: { id: string; value: string; placeholder: string; onCommit: (v: string) => void }) {
+  const [v, setV] = useState(value);
+  useEffect(() => setV(value), [value]);
+  const commit = () => {
+    if (v.trim() !== value) onCommit(v.trim());
+  };
+  return (
+    <input
+      id={id}
+      name={id}
+      className="input input--path"
+      spellCheck={false}
+      autoComplete="off"
+      placeholder={placeholder}
+      value={v}
+      onChange={(e) => setV(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === "Enter" && commit()}
+    />
   );
 }
 

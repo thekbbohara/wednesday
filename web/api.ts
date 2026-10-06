@@ -99,12 +99,22 @@ export interface Settings {
   maxTurns: number;
   sleepAt: string;
   sleepModel: string;
+  /** CLAUDE_CONFIG_DIR for every Claude launch; "" = the default login. */
+  claudeConfigDir: string;
+}
+
+export interface ClaudeAccount {
+  dir: string;
+  exists: boolean;
+  loggedIn: boolean;
+  email: string | null;
 }
 
 export interface SettingsView {
   settings: Settings;
   models: string[];
   about: { dataDir: string; token: boolean; runtimes: { id: string; command: string }[]; skillsFile: string; settingsFile: string };
+  claudeAccount: ClaudeAccount;
 }
 
 export interface SkillDetail {
@@ -167,9 +177,9 @@ export const api = {
   settings: () => fetch("/api/settings").then((r) => json<SettingsView>(r)),
   saveSettings: async (patch: Partial<Settings>) => {
     const res = await fetch("/api/settings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) });
-    const body = (await res.json().catch(() => ({}))) as { settings?: Settings; errors?: Record<string, string> };
+    const body = (await res.json().catch(() => ({}))) as { settings?: Settings; claudeAccount?: ClaudeAccount; errors?: Record<string, string> };
     if (!res.ok) throw Object.assign(new Error("invalid"), { errors: body.errors ?? {} });
-    return body.settings!;
+    return { settings: body.settings!, claudeAccount: body.claudeAccount! };
   },
 };
 

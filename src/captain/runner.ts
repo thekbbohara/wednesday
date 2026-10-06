@@ -3,6 +3,7 @@
 // returns exact token usage and the context window, so rotation is measured,
 // not guessed from the screen; and rotating is just "stop resuming".
 import { spawn } from 'node:child_process'
+import { claudeEnv } from '../claude-account.ts'
 
 export interface TurnRequest {
   sessionId: string
@@ -35,8 +36,8 @@ export interface ClaudeRunnerOptions {
   cwd: string
   allowedTools: string[] | (() => string[])
   timeoutSec: number
-  /** Extra environment, e.g. CLAUDE_CONFIG_DIR for a second account. */
-  env?: Record<string, string>
+  /** The account's CLAUDE_CONFIG_DIR; empty or unset = the default login (an inherited value is dropped). */
+  configDir?: string
 }
 
 export class ClaudeRunner implements Runner {
@@ -64,7 +65,7 @@ export class ClaudeRunner implements Runner {
       ...(req.resume ? ['--resume', req.sessionId] : ['--session-id', req.sessionId]),
     ]
     return new Promise((resolve) => {
-      const child = spawn(this.opts.bin, args, { cwd: this.opts.cwd, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, ...this.opts.env } })
+      const child = spawn(this.opts.bin, args, { cwd: this.opts.cwd, stdio: ['pipe', 'pipe', 'pipe'], env: claudeEnv(this.opts.configDir ?? '') })
       let out = ''
       let err = ''
       const timer = setTimeout(() => child.kill('SIGTERM'), this.opts.timeoutSec * 1000)

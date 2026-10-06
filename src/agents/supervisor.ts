@@ -91,6 +91,31 @@ export interface SupervisorOptions {
   hook: { url: string; token?: string } | null
   pollMs?: number
   timings?: Partial<typeof DEFAULT_TIMINGS>
+  /** The Claude account (CLAUDE_CONFIG_DIR) for workers, read at each spawn; empty = the default login. */
+  claudeConfigDir?: () => string
+}
+
+/**
+ * The command and extra environment a worker starts with. Every worker gets the
+ * Claude account set in Settings; with none set, an inherited CLAUDE_CONFIG_DIR
+ * is unset in the shell so the default login is used.
+ */
+export function launchSpec(
+  id: string,
+  runtime: Runtime,
+  opts: { hook: SupervisorOptions['hook']; hookScript: string; claudeConfigDir: string },
+): { command: string; env: Record<string, string> } {
+  const env: Record<string, string> = { MAJORDOMO_AGENT: id }
+  let command = runtime.command
+  if (runtime.turnHook === 'claude') command += claudeSettingsArg(opts.hook ? opts.hookScript : null)
+  else if (runtime.turnHook && opts.hook) command += turnHookArgs(runtime.turnHook, opts.hookScript)
+  if (opts.hook && runtime.turnHook) {
+    env.MAJORDOMO_URL = opts.hook.url
+    if (opts.hook.token) env.MAJORDOMO_TOKEN = opts.hook.token
+  }
+  if (opts.claudeConfigDir) env.CLAUDE_CONFIG_DIR = opts.claudeConfigDir
+  else command = `unset CLAUDE_CONFIG_DIR; ${command}`
+  return { command, env }
 }
 
 export class Supervisor extends EventEmitter {
@@ -101,6 +126,7 @@ export class Supervisor extends EventEmitter {
   private dataDir: string
   private hook: SupervisorOptions['hook']
   private hookScript: string
+  private claudeConfigDir: () => string
   private trackers = new Map<string, Tracker>()
   private timer: NodeJS.Timeout | null = null
   private polling = false
@@ -116,6 +142,7 @@ export class Supervisor extends EventEmitter {
     this.tmux = new Tmux(opts.socket)
     this.runtimes = loadRuntimes(opts.dataDir)
     this.hookScript = writeHookScript(opts.dataDir)
+    this.claudeConfigDir = opts.claudeConfigDir ?? (() => '')
     this.pollMs = opts.pollMs ?? 1500
     this.timings = { ...DEFAULT_TIMINGS, ...opts.timings }
   }
@@ -238,14 +265,7 @@ export class Supervisor extends EventEmitter {
   private async launch(a: AgentRow, runtime: Runtime, brief: string): Promise<void> {
     const session = Supervisor.session(a.id)
     await this.tmux.kill(session)
-    const env: Record<string, string> = { MAJORDOMO_AGENT: a.id }
-    let command = runtime.command
-    if (runtime.turnHook === 'claude') command += claudeSettingsArg(this.hook ? this.hookScript : null)
-    else if (runtime.turnHook && this.hook) command += turnHookArgs(runtime.turnHook, this.hookScript)
-    if (this.hook && runtime.turnHook) {
-      env.MAJORDOMO_URL = this.hook.url
-      if (this.hook.token) env.MAJORDOMO_TOKEN = this.hook.token
-    }
+    const { command, env } = launchSpec(a.id, runtime, { hook: this.hook, hookScript: this.hookScript, claudeConfigDir: this.claudeConfigDir() })
     await this.tmux.start(session, a.cwd, command, env)
     this.trackers.set(a.id, {
       print: null,

@@ -17,6 +17,6 @@ export function buildRunner(p: Provider, cfg: Config): Runner {
     cwd: cfg.dataDir,
     allowedTools: () => cfg.allowedTools,
     timeoutSec: cfg.turnTimeout,
-    ...(p.configDir ? { env: { CLAUDE_CONFIG_DIR: p.configDir } } : {}),
+    configDir: p.configDir ?? '',
   })
 }

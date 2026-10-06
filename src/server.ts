@@ -20,6 +20,7 @@ import { loadSkills, type Skill } from './skills/skills.ts'
 import { apply, check, parseEngineCommand, currentSettings, loadSettings, MODELS, saveSettings, type Settings } from './settings.ts'
 import { EXP_RULES, OVERALL_SCALE, progress, type Progress } from './skills/levels.ts'
 import { startSleepSchedule } from './sleep/schedule.ts'
+import { claudeAccount } from './claude-account.ts'
 
 export interface Agent {
   id: string
@@ -222,6 +223,7 @@ export function createApp(opts: {
         skillsFile: join(cfg.dataDir, 'skills.json'),
         settingsFile: join(cfg.dataDir, 'settings.json'),
       },
+      claudeAccount: claudeAccount(cfg.claudeConfigDir),
     }),
   )
 
@@ -233,7 +235,7 @@ export function createApp(opts: {
     apply(cfg, known)
     if (opts.persistSettings) saveSettings(cfg)
     tick()
-    return c.json({ settings: currentSettings(cfg) })
+    return c.json({ settings: currentSettings(cfg), claudeAccount: claudeAccount(cfg.claudeConfigDir) })
   })
 
   app.get('/api/skills/:id', (c) => {
@@ -398,9 +400,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (!token && host !== '127.0.0.1' && host !== 'localhost') console.warn(`warning: listening on ${host} without MAJORDOMO_TOKEN`)
   // Where agents' hooks and the captain's tools reach this server (loopback when listening on all addresses).
   const selfUrl = `http://${host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host}:${port}`
-  const supervisor = new Supervisor({ mem, name: cfg.name, dataDir: cfg.dataDir, socket: process.env.MAJORDOMO_TMUX_SOCKET || 'majordomo', hook: { url: selfUrl, token } })
+  const supervisor = new Supervisor({ mem, name: cfg.name, dataDir: cfg.dataDir, socket: process.env.MAJORDOMO_TMUX_SOCKET || 'majordomo', hook: { url: selfUrl, token }, claudeConfigDir: () => cfg.claudeConfigDir })
   supervisor.start()
   const { app } = createApp({ mem, cfg, runnerFor: (p) => buildRunner(p, cfg), token, supervisor, selfUrl, persistSettings: true, webRoot: resolve(import.meta.dirname, '../dist') })
-  startSleepSchedule(mem, cfg, new ClaudeSleepModel({ bin: cfg.claudeBin, model: () => cfg.sleepModel, promptFile: cfg.sleepPromptFile, timeoutSec: cfg.turnTimeout, cwd: cfg.dataDir, name: cfg.name }))
+  startSleepSchedule(mem, cfg, new ClaudeSleepModel({ bin: cfg.claudeBin, model: () => cfg.sleepModel, promptFile: cfg.sleepPromptFile, timeoutSec: cfg.turnTimeout, cwd: cfg.dataDir, name: cfg.name, configDir: () => cfg.claudeConfigDir }))
   serve({ fetch: app.fetch, hostname: host, port }, () => console.log(`${cfg.name} on http://${host}:${port} - memory ${cfg.dbPath} - model ${cfg.model} - sleep ${cfg.sleepAt || 'off'}`))
 }

@@ -3,14 +3,16 @@
 //   node src/sleep.ts            consolidate everything since the last sleep
 //   node src/sleep.ts --dry-run  show what it would change, change nothing
 import { loadConfig } from './config.ts'
+import { loadSettings } from './settings.ts'
 import { Memory } from './memory/store.ts'
 import { ClaudeSleepModel, summaryLine } from './sleep/sleep.ts'
 import { sleepNow } from './sleep/schedule.ts'
 
 const dryRun = process.argv.includes('--dry-run')
 const cfg = loadConfig()
+loadSettings(cfg)
 const mem = new Memory(cfg.dbPath, { nowBudgetChars: cfg.nowBudgetChars })
-const model = new ClaudeSleepModel({ bin: cfg.claudeBin, model: cfg.sleepModel, promptFile: cfg.sleepPromptFile, timeoutSec: cfg.turnTimeout, cwd: cfg.dataDir, name: cfg.name })
+const model = new ClaudeSleepModel({ bin: cfg.claudeBin, model: cfg.sleepModel, promptFile: cfg.sleepPromptFile, timeoutSec: cfg.turnTimeout, cwd: cfg.dataDir, name: cfg.name, configDir: cfg.claudeConfigDir })
 const r = await sleepNow(mem, cfg, model, { dryRun })
 if (!r.days.length) console.log('Nothing new since the last sleep.')
 for (const d of r.days) {

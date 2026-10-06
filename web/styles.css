@@ -914,6 +914,47 @@ button {
   font-family: var(--mono);
 }
 
+.input--path {
+  width: 220px;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.input--path::placeholder {
+  color: var(--muted);
+}
+
+.setting__account {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.setting__account .mono {
+  font-family: var(--mono);
+  color: var(--ink);
+}
+
+.setting__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2fae84;
+  flex: none;
+}
+
+.setting__account.is-off .setting__dot {
+  background: #d39b2a;
+}
+
+.setting__account.is-missing .setting__dot {
+  background: #c43c3c;
+}
+
 .input--time {
   width: 136px;
   font-family: var(--mono);

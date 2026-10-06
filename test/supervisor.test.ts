@@ -152,6 +152,24 @@ describe('supervisor', () => {
     await sup.spawn({ id: 'a', runtime: 'fake', cwd: dataDir, brief: 'x' })
     await expect(sup.spawn({ id: 'a', runtime: 'fake', cwd: dataDir, brief: 'x' })).rejects.toThrow(/already exists/)
   })
+
+  it('starts each worker on the Claude account set at spawn time', { timeout: 30_000 }, async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), 'majordomo-sup-'))
+    writeFileSync(join(dataDir, 'runtimes.json'), JSON.stringify([{ id: 'envy', command: 'echo "dir=[${CLAUDE_CONFIG_DIR-unset}]"; sleep 30' }]))
+    const live = { dir: '/accounts/work' }
+    const sup = new Supervisor({ mem: new Memory(join(dataDir, 'memory.db')), dataDir, socket, hook: null, pollMs: 150, claudeConfigDir: () => live.dir })
+    sups.push(sup)
+    sup.start()
+    await sup.spawn({ id: 'env-a', runtime: 'envy', cwd: dataDir, brief: 'x' })
+    const shows = async (id: string, re: RegExp) => {
+      for (let end = Date.now() + 15_000; Date.now() < end; await new Promise((r) => setTimeout(r, 50))) if (re.test(await sup.screen(id))) return
+      throw new Error(`${id} never showed ${re}: ${await sup.screen(id)}`)
+    }
+    await shows('env-a', /dir=\[\/accounts\/work\]/)
+    live.dir = ''
+    await sup.spawn({ id: 'env-b', runtime: 'envy', cwd: dataDir, brief: 'x' })
+    await shows('env-b', /dir=\[unset\]/)
+  })
 })
 
 describe('composeBrief', () => {

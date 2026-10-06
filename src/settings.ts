@@ -4,6 +4,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ENGINES, type Engine } from './captain/provider.ts'
 import type { Config } from './config.ts'
+import { configDirError, contractHome, expandHome } from './claude-account.ts'
 
 export interface Settings {
   engine: Engine
@@ -16,6 +17,8 @@ export interface Settings {
   /** "HH:MM", or "" for off. */
   sleepAt: string
   sleepModel: string
+  /** CLAUDE_CONFIG_DIR for every Claude launch, "~/..." allowed; "" = the default login (~/.claude). */
+  claudeConfigDir: string
 }
 
 export const MODELS = ['opus', 'sonnet', 'haiku']
@@ -32,6 +35,7 @@ export function currentSettings(cfg: Config): Settings {
     maxTurns: cfg.maxTurns,
     sleepAt: cfg.sleepAt,
     sleepModel: cfg.sleepModel,
+    claudeConfigDir: contractHome(cfg.claudeConfigDir),
   }
 }
 
@@ -48,6 +52,10 @@ export function check(patch: Partial<Settings>): Record<string, string> {
   if (patch.maxTurns !== undefined && !(Number.isInteger(patch.maxTurns) && patch.maxTurns >= 5 && patch.maxTurns <= 500)) errors.maxTurns = 'A whole number from 5 to 500.'
   if (patch.sleepAt !== undefined && !(patch.sleepAt === '' || /^([01]\d|2[0-3]):[0-5]\d$/.test(String(patch.sleepAt))))
     errors.sleepAt = 'A 24h time like 04:00, or off.'
+  if (patch.claudeConfigDir !== undefined) {
+    const err = configDirError(patch.claudeConfigDir)
+    if (err) errors.claudeConfigDir = err
+  }
   return errors
 }
 
@@ -60,6 +68,7 @@ export function apply(cfg: Config, patch: Partial<Settings>): void {
   if (patch.rotateAt !== undefined) cfg.rotateAt = patch.rotateAt
   if (patch.maxTurns !== undefined) cfg.maxTurns = patch.maxTurns
   if (patch.sleepAt !== undefined) cfg.sleepAt = patch.sleepAt
+  if (patch.claudeConfigDir !== undefined) cfg.claudeConfigDir = expandHome(patch.claudeConfigDir)
   if (patch.web !== undefined) {
     const rest = cfg.allowedTools.filter((t) => !WEB_TOOLS.includes(t))
     cfg.allowedTools = patch.web ? [...rest, ...WEB_TOOLS] : rest
