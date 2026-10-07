@@ -3,6 +3,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ENGINES, type Engine } from './captain/provider.ts'
+import { defaultEngineModel } from './engines.ts'
 import type { Config } from './config.ts'
 import { configDirError, contractHome, expandHome } from './claude-account.ts'
 
@@ -42,7 +43,7 @@ export function currentSettings(cfg: Config): Settings {
 /** Field -> reason, for every invalid value in the patch. */
 export function check(patch: Partial<Settings>): Record<string, string> {
   const errors: Record<string, string> = {}
-  if (patch.engine !== undefined && !ENGINES.includes(patch.engine)) errors.engine = 'Use claude, codex or kimi.'
+  if (patch.engine !== undefined && !ENGINES.includes(patch.engine)) errors.engine = 'Use claude, codex, kimi or agy.'
   if (patch.engineModel !== undefined && (typeof patch.engineModel !== 'string' || (patch.engineModel !== '' && !MODEL.test(patch.engineModel)))) errors.engineModel = 'Use a model id or empty for default.'
   if (patch.model !== undefined && !MODEL.test(String(patch.model))) errors.model = 'Use a model alias (opus, sonnet, haiku) or a full model id.'
   if (patch.sleepModel !== undefined && !MODEL.test(String(patch.sleepModel))) errors.sleepModel = 'Use a model alias (opus, sonnet, haiku) or a full model id.'
@@ -61,8 +62,10 @@ export function check(patch: Partial<Settings>): Record<string, string> {
 
 /** Applies a checked patch to the live config. */
 export function apply(cfg: Config, patch: Partial<Settings>): void {
+  if (patch.engine !== undefined && patch.engine !== cfg.engine) cfg.engineModel = ''
   if (patch.engine !== undefined) cfg.engine = patch.engine
   if (patch.engineModel !== undefined) cfg.engineModel = patch.engineModel
+  cfg.engineModel ||= defaultEngineModel(cfg.engine)
   if (patch.model !== undefined) cfg.model = patch.model
   if (patch.sleepModel !== undefined) cfg.sleepModel = patch.sleepModel
   if (patch.rotateAt !== undefined) cfg.rotateAt = patch.rotateAt
@@ -100,6 +103,7 @@ export function parseEngineCommand(text: string): Partial<Settings> | null {
   const [, engine, model, ...extra] = text.trim().split(/\s+/)
   if (!engine) return {}
   const patch = { engine: engine as Engine, engineModel: model ?? '' }
-  if (extra.length || Object.keys(check(patch)).length) throw new Error('Usage: /engine [claude|codex|kimi] [model]')
+  if (extra.length || Object.keys(check(patch)).length) throw new Error('Usage: /engine [claude|codex|kimi|agy] [model]')
+  patch.engineModel ||= defaultEngineModel(patch.engine)
   return patch
 }

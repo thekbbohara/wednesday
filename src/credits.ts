@@ -6,6 +6,7 @@ import type { Config } from './config.ts'
 import { contractHome } from './claude-account.ts'
 import { loadRuntimes } from './agents/runtimes.ts'
 import { readAgy, parseAgy, type AgyRead } from './agy-usage.ts'
+import { AGY_WORKER_COMMAND } from './engines.ts'
 
 import type { Allowance, CreditAccount } from './credits-types.ts'
 type Obj = Record<string, any>
@@ -127,7 +128,7 @@ export class Credits {
       if (r.id === 'agy') {
         // Metadata only, for cache invalidation when the CLI account changes.
         targets.push({ id: 'agy', runtime: r.label, folder: 'agy CLI active account', kind: 'agy', file: join(this.home, '.gemini/antigravity-cli/antigravity-oauth-token') })
-        if ('command' in r && r.command !== 'agy') targets.push({ id: 'routing:agy', runtime: `${r.label} account routing`, folder: 'Custom launch command', reason: 'This custom launch command may select another account. The agy CLI quotas report the server environment account independently.' })
+        if ('command' in r && r.command !== 'agy' && r.command !== AGY_WORKER_COMMAND) targets.push({ id: 'routing:agy', runtime: `${r.label} account routing`, folder: 'Custom launch command', reason: 'This custom launch command may select another account. The agy CLI quotas report the server environment account independently.' })
         continue
       }
       if ('command' in r && typeof r.command === 'string' && ['claude-code', 'codex', 'pi', 'kimi', 'opencode'].includes(r.id)) {

@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname } from 'node:path'
 import { loadConfig } from '../config.ts'
 import { apply, check, loadSettings, saveSettings } from '../settings.ts'
+import { ENGINES } from '../engines.ts'
 import { addSkill, DEFAULT_SKILLS, loadSkills, type Skill } from '../skills/skills.ts'
 import { FACT_KINDS, Memory, TASK_STATUSES, type Hit } from '../memory/store.ts'
 
@@ -232,7 +233,7 @@ function registerAgentTools(server: McpServer, api: AgentApi | null, settingsDir
 
   server.registerTool('captain_engine_set', {
     description: 'Switch the captain engine when the owner requests it. Starts a fresh memory-backed session at the next turn boundary.',
-    inputSchema: { engine: z.enum(['claude', 'codex', 'kimi']), model: z.string().optional() },
+    inputSchema: { engine: z.enum(ENGINES), model: z.string().optional() },
   }, async ({ engine, model }) => {
     if (api) return call('POST', '/api/captain/engine', { engine, model })
     if (!settingsDir) return { isError: true, content: [{ type: 'text' as const, text: 'Captain settings directory is unavailable.' }] }
@@ -255,7 +256,7 @@ function registerAgentTools(server: McpServer, api: AgentApi | null, settingsDir
         'You are woken when it ends a turn, needs an answer, or dies; do not poll.',
       inputSchema: {
         name: z.string().describe('Short lowercase name, e.g. "scraper". Never reused.'),
-        runtime: z.string().default('claude-code').describe('claude-code (default), codex, pi, kimi or opencode'),
+        runtime: z.string().default('claude-code').describe('claude-code (default), codex, pi, kimi, opencode or agy (Gemini by default)'),
         brief: z.string().min(1),
         task_id: z.number().int().optional(),
         repo: z.string().optional(),

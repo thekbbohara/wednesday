@@ -227,7 +227,7 @@ export function createApp(opts: {
     const body = await c.req.json().catch(() => null)
     const patch = { engine: body?.engine, engineModel: body?.model ?? '' }
     const errors = check(patch)
-    if (!body?.engine || Object.keys(errors).length) return c.json({ error: 'Use claude, codex or kimi and a valid model.' }, 400)
+    if (!body?.engine || Object.keys(errors).length) return c.json({ error: 'Use claude, codex, kimi or agy and a valid model.' }, 400)
     apply(cfg, patch)
     if (opts.persistSettings) saveSettings(cfg)
     tick()

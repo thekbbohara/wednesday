@@ -8,6 +8,7 @@ import { Nav, usePage } from "./Nav";
 import { Reply } from "./Reply";
 import { MemoryPage, PageHead, SettingsPage, SkillsPage, TasksPage } from "./pages";
 import { CreditsPage } from "./Credits";
+import { ENGINES } from "../src/engines";
 import { Face, type Mood } from "./Face";
 import { buildRows, fullTime, splitCitations, type Row } from "./thread";
 
@@ -1029,7 +1030,7 @@ function Composer({ onSend, name, engine }: { onSend: (text: string) => Promise<
   return (
     <div className="composer-wrap">
       <label className="composer__engine">Engine <select aria-label="Captain engine" value={engine} onChange={(e) => { void onSend(`/engine ${e.target.value}`).catch((e) => setErr(e.message)); }}>
-        {['claude', 'codex', 'kimi'].map((value) => <option key={value} value={value}>{value}</option>)}
+        {ENGINES.map((value) => <option key={value} value={value}>{value}</option>)}
       </select></label>
       {err && <p className="composer__err">{err}</p>}
       <form

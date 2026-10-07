@@ -36,7 +36,7 @@ function status(r: Reply): string {
   return dim(`[L${r.ledgerId}${pct}${r.rotated ? ` - session rotated: ${r.rotated}` : ''}]`)
 }
 
-const HELP = `/usages (/usage)  /now  /tasks  /facts  /search <words>  /get <F1|T1|L1>  /rotate  /sessions  /engine [claude|codex|kimi] [model]  /help  /quit`
+const HELP = `/usages (/usage)  /now  /tasks  /facts  /search <words>  /get <F1|T1|L1>  /rotate  /sessions  /engine [claude|codex|kimi|agy] [model]  /help  /quit`
 
 async function command(line: string): Promise<boolean> {
   if (isUsageCommand(line)) { console.log(await quotaReply(line)); return true }

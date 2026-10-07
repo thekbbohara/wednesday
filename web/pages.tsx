@@ -5,6 +5,7 @@ import { Face } from "./Face";
 import { Reply } from "./Reply";
 import { ExpBar, SkillIcon } from "./Skills";
 import { fullTime } from "./thread";
+import { AGY_CAPTAIN_MODEL, AGY_MODELS, ENGINES } from "../src/engines";
 
 type OnRef = (ref: string, e: MouseEvent<HTMLElement>) => void;
 
@@ -469,7 +470,7 @@ export function SettingsPage({ name, onUsages }: { name: string; onUsages?: () =
             "Engine",
             `The CLI ${name} runs on. Applies from the next message.`,
             <select id="set-engine" name="engine" className="select" value={s.engine} onChange={(e) => save({ engine: e.target.value as Settings["engine"], engineModel: "" })}>
-              {["claude", "codex", "kimi"].map((v) => (
+              {ENGINES.map((v) => (
                 <option key={v} value={v}>
                   {v}
                 </option>
@@ -484,10 +485,13 @@ export function SettingsPage({ name, onUsages }: { name: string; onUsages?: () =
             account && !errors.claudeConfigDir && <AccountLine account={account} />,
           )}
           {row(
-            "model",
+            s.engine === "agy" ? "engineModel" : "model",
             "Model",
             `The model ${name} thinks with. Applies from the next message.`,
-            <select id="set-model" name="model" className="select" value={s.model} onChange={(e) => save({ model: e.target.value })}>
+            s.engine === "agy" ? <select id="set-engineModel" name="engineModel" className="select" value={s.engineModel || AGY_CAPTAIN_MODEL} onChange={(e) => save({ engineModel: e.target.value })}>
+              {!AGY_MODELS.some(m => m.id === s.engineModel) && s.engineModel && <option value={s.engineModel}>{s.engineModel}</option>}
+              {AGY_MODELS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+            </select> : <select id="set-model" name="model" className="select" value={s.model} onChange={(e) => save({ model: e.target.value })}>
               {models.map((m) => (
                 <option key={m} value={m}>
                   {m}

@@ -89,7 +89,7 @@ padded with empty slots that start a new agent), and one big page card. Pages
 ### Captain engine
 
 Use `/engine` to see the selected engine, or `/engine claude`, `/engine codex`,
-`/engine kimi` to switch. Add a model as the second argument, for example
+`/engine kimi` or `/engine agy` to switch. Add a model as the second argument, for example
 `/engine codex gpt-5`. Omitting the model restores that engine's default.
 The chat input also has an engine selector. Plain-language requests use the
 captain's `captain_engine_set(engine, model?)` MCP tool.
@@ -104,6 +104,22 @@ with a dedicated captain home under `<data>/kimi-captain`. Its authentication
 and provider configuration are copied from `KIMI_CODE_HOME` or `~/.kimi-code`;
 its MCP servers and session workspaces are isolated from worker sessions.
 The Codex and Kimi CLIs must be installed and authenticated on the server.
+
+Antigravity (`agy`) must also be installed and already signed in. Its captain
+default is `claude-opus-4-6-thinking`; new agy workers explicitly launch with
+`gemini-3.8-flash-medium`. Override the captain with `/engine agy <model-id>`
+or Settings, and worker commands with `<data>/runtimes.json`. `agy models`
+lists the installed CLI's available ids.
+
+The agy captain generates a private agent definition per memory session under
+`<data>/agy-captain`, carrying Wednesday's instructions and explicit memory/worker
+MCP servers. It excludes inherited customizations and built-in tools, delegating
+work through the worker tools. Its existing login is used without copying
+credentials or changing global configuration. CLI conversation ids are mapped
+to memory sessions and resumed explicitly. Aggregate token counts are not
+context size, so agy uses the configured turn cap for rotation. The CLI does
+not report a reliable dollar cost. Read-only `/usage` and `/credits` commands
+provide its account quota separately without inference.
 
 ### Skills and EXP
 
