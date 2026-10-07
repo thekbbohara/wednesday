@@ -36,7 +36,7 @@ export interface Status {
   name: string;
   thinking: boolean;
   agents: Agent[];
-  engine: "claude" | "codex" | "kimi";
+  engine: import("../src/engines").Engine;
   model: string;
   lastReplyAt: string | null;
   majordomo: Progress;
@@ -94,7 +94,7 @@ export interface Hit {
 
 export interface Settings {
   engineModel: string;
-  engine: "claude" | "codex" | "kimi";
+  engine: import("../src/engines").Engine;
   model: string;
   web: boolean;
   rotateAt: number;
@@ -166,7 +166,7 @@ export const api = {
     ),
   send: (text: string) =>
     fetch("/api/messages", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) }).then((r) =>
-      json<{ item: ChatItem }>(r),
+      json<{ item: ChatItem; reply?: ChatItem }>(r),
     ),
   retry: (id: number) =>
     fetch("/api/retry", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) }).then((r) =>

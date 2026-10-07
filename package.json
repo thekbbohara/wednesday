@@ -1,5 +1,5 @@
 {
-  "name": "majordomo",
+  "name": "wednesday",
   "private": true,
   "version": "0.1.0",
   "description": "A personal assistant in one chat forever: layered memory, session rotation, and a crew of AI coding agents.",
@@ -9,6 +9,7 @@
     "node": ">=22.18"
   },
   "bin": {
+    "wednesday": "src/cli.ts",
     "majordomo": "src/cli.ts"
   },
   "scripts": {

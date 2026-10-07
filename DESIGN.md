@@ -1,4 +1,4 @@
-# Majordomo design contract
+# Wednesday design contract
 
 ## Style
 **Game studio, light** (agent-hq's roster screen), with the chat as its
@@ -6,8 +6,8 @@ command center.
 
 Why: the owner talks to one PA all day and runs a crew of agents through it.
 The owner's sketch (2026-10-04) asks for agent-hq's character-select layout:
-a nav pill on the left, Majordomo as the hero portrait, the crew as a roster of
-faces, and one big panel whose first page is the Command Center chat. Majordomo's
+a nav pill on the left, Wednesday as the hero portrait, the crew as a roster of
+faces, and one big panel whose first page is the Command Center chat. Wednesday's
 skills are gamified (levels and EXP). The faces, body colors and palette are
 agent-hq's, so nothing is new to learn. Light and soft because it stays open
 all day next to dark terminals.
@@ -18,7 +18,7 @@ all day next to dark terminals.
  +--+  |  +--------+    | | Crew  6 agents . 2 working . 1 needs you  |
  |CC|  |  |  face  |    | | [a] [b] [c] [d] [e] [ ] [ ]              |
  |Sk|  |  +--------+    | | [f] [ ] [ ] [ ] [ ] [ ] [ ]               |
- |Tk|  |  Majordomo Lv 7   | +------------------------------------------+
+ |Tk|  |  Wednesday Lv 7   | +------------------------------------------+
  |Me|  |  ====---- exp  |
  |St|  +----------------+ +------------------------------------------+
  +--+  | <page title>                                                |
@@ -32,8 +32,8 @@ all day next to dark terminals.
   gap 16. Below, gap 16: the page card fills the remaining height. The page
   itself never scrolls on desktop; only the content inside the page card does.
 - Pages: **Command Center** (default), **Skills**, **Tasks**, **Memory**,
-  **Settings**. The current page lives in the URL hash (`#/tasks`) so reloads
-  and the back button keep it. The chat stays mounted while another page is
+  **Runtime usage and credits**, **Settings**. Runtime usage lives at `/usages`;
+  other pages use the URL hash (`#/tasks`) so reloads and the back button keep it. The chat stays mounted while another page is
   open, so its scroll position and draft survive.
 - Session rotation is invisible; the chat is the ledger.
 
@@ -47,7 +47,7 @@ all day next to dark terminals.
 | --ink        | #1a2130   | primary text, owner bubble fill |
 | --muted      | #6c7588   | secondary text, receipts, day labels |
 | --faint      | #a3aabb   | placeholders, disabled |
-| --blue       | #5cbdf4   | Majordomo body color |
+| --blue       | #5cbdf4   | Wednesday body color |
 | --blue-deep  | #2b8fd8   | focus ring, send button, citation chip text |
 | --mint       | #4fd1a5   | working |
 | --amber      | #ffb547   | needs you |
@@ -57,7 +57,7 @@ all day next to dark terminals.
 Agent body colors by runtime, as agent-hq: claude-code #5cbdf4, codex #7c8cf8,
 pi #b28cf5, opencode #4fd1a5, kimi #f78fb3, other #8fb3c9.
 
-- Type: **Fredoka** 600 for the name "Majordomo" and day labels; **Inter** 400-600
+- Type: **Fredoka** 600 for the name "Wednesday" and day labels; **Inter** 400-600
   for everything else; **JetBrains Mono** for ids (F3, T1, L42) and code.
 - Scale: 12 / 13 / 15 / 17. Message text 15/1.55. Micro-labels 11px uppercase,
   0.12em tracking, --muted.
@@ -71,7 +71,7 @@ pi #b28cf5, opencode #4fd1a5, kimi #f78fb3, other #8fb3c9.
 ## Components
 - **Card**: white, radius 22, the panel shadow, padding 20 (all four main
   areas: portrait, roster, page card, and the nav pill radius 999).
-- **Portrait card**: Majordomo face 96px centered at the top, then name (Fredoka
+- **Portrait card**: Wednesday face 96px centered at the top, then name (Fredoka
   600 22) with a level badge ("Lv 7", Fredoka 600 13, --blue-deep on 14%
   tint, radius 999), then the overall EXP bar (6px, radius 999, --blue fill on
   --panel-2) with "1,240 / 1,500 exp" (12 --muted, mono digits), then one row:
@@ -111,7 +111,7 @@ pi #b28cf5, opencode #4fd1a5, kimi #f78fb3, other #8fb3c9.
   works on it, updated time (12 --muted, right). Click a row to expand: goal,
   plan, result (13, pre-wrap), citations clickable.
 - **Memory page**: search box in the head (searches facts and the ledger,
-  with the same engine Majordomo uses). Sections with micro-labels: **Now** (the
+  with the same engine Wednesday uses). Sections with micro-labels: **Now** (the
   note, in a --panel-2 block), **Facts** (rows: F chip, kind tag, subject
   600 14, body 14, source chip, updated date; "show outdated" toggle reveals
   stale facts struck through with their replacement chip), **Digests** (one
@@ -151,7 +151,7 @@ pi #b28cf5, opencode #4fd1a5, kimi #f78fb3, other #8fb3c9.
   captain wrote to memory during that turn: "saved F3 . updated T1 . updated
   now". Each id is a chip. Omitted when nothing was written.
 - **Overnight row**: after the nightly sleep, one row at captain indent like
-  the agent row: Majordomo's face asleep (closed eyes, 20px), 13px --muted text
+  the agent row: Wednesday's face asleep (closed eyes, 20px), 13px --muted text
   "Overnight I tidied memory: 3 new facts, 1 updated, 2 outdated" and the
   digest's ledger chip (opens the day's digest). The sleep's own fact
   receipts are never shown; nothing else about the sleep is.
@@ -161,7 +161,7 @@ pi #b28cf5, opencode #4fd1a5, kimi #f78fb3, other #8fb3c9.
   and three dots. Owner messages sent meanwhile appear at once and are
   answered together in the next turn.
 - **Error notice**: centered 13px coral text in a coral-tinted pill
-  ("Majordomo couldn't reply: <reason>") with a **Retry** button.
+  ("Wednesday couldn't reply: <reason>") with a **Retry** button.
 - **Day separator**: centered micro-label "Today" / "Yesterday" / "Mon 3 Oct".
 - **Time**: 12px --muted 24h time on hover of a message (title attribute on
   desktop, shown under the bubble on tap on touch).
@@ -185,9 +185,55 @@ pi #b28cf5, opencode #4fd1a5, kimi #f78fb3, other #8fb3c9.
 - 760-1099: the nav becomes a horizontal pill above the top band (buttons in
   a row, same order); portrait 260 wide; same 236 band.
 - < 760: single column, 12px gutters, page scrolls only inside the thread.
-  The nav is a bottom tab bar (5 buttons, 56 tall, safe-area inset) instead
+  The nav is a bottom tab bar (6 buttons, 56 tall, safe-area inset) instead
   of a pill. Compact portrait (face 52, name, level, EXP bar in one row), roster as one horizontally scrolling
   row of 44px faces with the stats line; the Command Center takes the rest
   of the height (100dvh). Bubbles max 88%; composer respects the safe-area
   inset and the on-screen keyboard.
 - Verified at 375, 768, 1024, 1440.
+
+
+## Runtime usage and credits (T48)
+
+Reason: the owner needs to choose among authenticated runtimes using account
+allowances, so usage gets the dedicated /usages page, a prominent link at the top of
+Settings, and a nav item between Memory and Settings.
+The existing light roster system remains the design source: white page card,
+--panel-2 account cards, --line dividers, 18px radius and 16px grid gaps.
+
+- Account grid: columns at least 320px, collapsing to one column on phones.
+  Use the existing page__body so all providers remain reachable by scrolling
+  inside the page card. Keep the title and Refresh control pinned in PageHead.
+- Card: runtime name at 17px, status pill at 11px, local credential source path
+  and non-secret account id at 11px mono. Long ids wrap instead of overflowing.
+- Allowance rows: independent provider windows, 13px label and bold remaining
+  percentage. An 8px rounded bar shows remaining allowance, blue-deep normally
+  and #c84949 at 10% or less. Unknown remaining values never get a bar.
+- Provider-specific allowances retain their reported scope. Opaque provider
+  names remain visible without guessing their meaning. Credit balances and
+  spending caps get separate rows; no cap never implies unlimited funds.
+- Status: Reported uses #d9f3e9 / #17684d; Stale uses #fff0d7 / #845000;
+  Unavailable uses the existing neutral line color. Reasons are readable
+  #a33939 text, with no credential values or raw provider error bodies.
+- Show source, fetched time and last check time on every card. Dates include
+  the browser timezone. Missing reset times say "Reset time not reported".
+  Stale data keeps its original fetched time and an explicit warning.
+- Refresh is at least 44px tall. Explain the 60-second cache beside the grid;
+  polling happens only while this page is mounted. Never substitute session
+  context, local token usage, model prices or a spending cap for account funds.
+- Mobile nav has six equal controls, each at least 44px wide at 375px. The
+  chat stays mounted and its composer draft survives navigation as before.
+
+The Settings entry is a --panel-2 inset card with a 44px minimum-height link
+labelled "View all runtime usage and credits". Its real href is /usages; normal
+clicks use history navigation so the mounted chat and draft survive. Direct
+navigation, reload, back/forward and the older #/credits link resolve correctly.
+/usages and /usage chat commands share these collectors, record a concise
+provider report, and never invoke an inference turn. Chat reset times are
+explicit UTC; the page shows browser-local times with timezone abbreviations.
+
+## Known gaps
+
+The existing design contract is prose-only and has no YAML token front matter.
+The design.md linter reports this as one warning and zero errors. T48 preserves
+that established format rather than rewriting the unrelated design contract.

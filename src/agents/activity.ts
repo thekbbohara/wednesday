@@ -77,7 +77,7 @@ export interface Choice {
 
 const CURSOR = /^\s*[❯›>▶]\s+/;
 const NUMBERED = /^\s*(?:[❯›>▶]\s+)?(\d+)[.)]\s+(.+?)\s*$/;
-const FOOTER = /\bEnter to (?:confirm|select)\b|\bEsc to (?:cancel|exit)\b/i;
+const FOOTER = /\bEnter (?:to )?(?:confirm|select)\b|\bEsc to (?:cancel|exit)\b/i;
 
 /**
  * Reads the options of a selection menu near the bottom of the screen, so the

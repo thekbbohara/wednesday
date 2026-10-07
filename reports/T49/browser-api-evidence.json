@@ -1,0 +1,38 @@
+{
+  "id": "agy",
+  "runtime": "agy (Antigravity)",
+  "account": "agy CLI active account",
+  "source": "Antigravity CLI /usage and /credits",
+  "status": "available",
+  "checkedAt": "2026-10-07T19:29:10.093Z",
+  "fetchedAt": "2026-10-07T19:29:21.025Z",
+  "reason": null,
+  "allowances": [
+    {
+      "label": "Gemini Models · Weekly Limit Remaining",
+      "remainingPercent": 100,
+      "resetsAt": "2026-10-14T19:34:01.000Z"
+    },
+    {
+      "label": "Gemini Models · Five Hour Limit Remaining",
+      "remainingPercent": 100,
+      "resetsAt": "2026-10-08T00:34:01.000Z"
+    },
+    {
+      "label": "Claude and GPT models · Weekly Limit Remaining",
+      "remainingPercent": 100,
+      "resetsAt": "2026-10-14T19:34:01.000Z"
+    },
+    {
+      "label": "Claude and GPT models · Five Hour Limit Remaining",
+      "remainingPercent": 100,
+      "resetsAt": "2026-10-08T00:34:01.000Z"
+    },
+    {
+      "label": "AI credits",
+      "remaining": "0 credits",
+      "resetsAt": null
+    }
+  ],
+  "note": "Models in each group share their windows. AI credits are separate."
+}

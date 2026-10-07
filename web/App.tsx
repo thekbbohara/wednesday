@@ -7,6 +7,8 @@ import { Cited } from "./Cited";
 import { Nav, usePage } from "./Nav";
 import { Reply } from "./Reply";
 import { MemoryPage, PageHead, SettingsPage, SkillsPage, TasksPage } from "./pages";
+import { CreditsPage } from "./Credits";
+import { ENGINES } from "../src/engines";
 import { Face, type Mood } from "./Face";
 import { buildRows, fullTime, splitCitations, type Row } from "./thread";
 
@@ -20,7 +22,7 @@ export function App() {
   const [items, setItems] = useState<ChatItem[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [status, setStatus] = useState<Status>({
-    engine: "claude", name: "Majordomo", thinking: false, agents: [], model: "", lastReplyAt: null, majordomo: { level: 1, exp: 0, floor: 0, next: 300 }, skills: [], waiting: 0 });
+    engine: "claude", name: "Wednesday", thinking: false, agents: [], model: "", lastReplyAt: null, majordomo: { level: 1, exp: 0, floor: 0, next: 300 }, skills: [], waiting: 0 });
   const [page, goPage] = usePage();
   // Bumps on every ledger change, so open pages refresh themselves.
   const [version, setVersion] = useState(0);
@@ -188,8 +190,8 @@ export function App() {
 
   const send = async (text: string) => {
     atBottom.current = true;
-    const { item } = await api.send(text);
-    setItems((cur) => mergeItems(cur, [item]));
+    const { item, reply } = await api.send(text);
+    setItems((cur) => mergeItems(cur, reply ? [item, reply] : [item]));
   };
 
   return (
@@ -262,9 +264,10 @@ export function App() {
               <MemoryPage version={version} onRef={openRef} name={status.name} />
             </div>
           )}
+          {page === "credits" && <div className="page__view"><CreditsPage /></div>}
           {page === "settings" && (
             <div className="page__view">
-              <SettingsPage name={status.name} />
+              <SettingsPage name={status.name} onUsages={() => goPage("credits")} />
             </div>
           )}
         </section>
@@ -298,7 +301,7 @@ type PopoverTarget =
 
 const OTHER_COLOR = "#8fb3c9";
 
-/** Majordomo's portrait: face, level and EXP, state. */
+/** Wednesday's portrait: face, level and EXP, state. */
 function Portrait({ mood, stateText, status }: { mood: Mood; stateText: string; status: Status }) {
   const narrow = useNarrow();
   const now = useNow(30_000);
@@ -1027,7 +1030,7 @@ function Composer({ onSend, name, engine }: { onSend: (text: string) => Promise<
   return (
     <div className="composer-wrap">
       <label className="composer__engine">Engine <select aria-label="Captain engine" value={engine} onChange={(e) => { void onSend(`/engine ${e.target.value}`).catch((e) => setErr(e.message)); }}>
-        {['claude', 'codex', 'kimi'].map((value) => <option key={value} value={value}>{value}</option>)}
+        {ENGINES.map((value) => <option key={value} value={value}>{value}</option>)}
       </select></label>
       {err && <p className="composer__err">{err}</p>}
       <form

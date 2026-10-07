@@ -42,7 +42,7 @@ describe('sleepInput', () => {
     ]
     const drop = [
       mem.append('captain', 'NOTHING_TO_REPORT', { meta: { silent: true } }),
-      mem.append('agent', 'Majordomo to w: go', { meta: { agent: 'w', event: 'message' } }),
+      mem.append('agent', 'Wednesday to w: go', { meta: { agent: 'w', event: 'message' } }),
       mem.append('now', 'Now v1'),
       mem.append('rotation', 'rotated'),
       mem.append('fact', 'F1 by sleep', { session: 'sleep', meta: { fact: 1 } }),

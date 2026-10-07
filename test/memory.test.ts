@@ -103,7 +103,7 @@ describe('schema safety', () => {
     const d = new DatabaseSync(path)
     d.exec('CREATE TABLE important(x)')
     d.close()
-    expect(() => new Memory(path)).toThrow(/not a Majordomo database/)
+    expect(() => new Memory(path)).toThrow(/not a Wednesday database/)
   })
 
   it('refuses a schema version it does not know', () => {

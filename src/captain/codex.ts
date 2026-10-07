@@ -1,5 +1,5 @@
 // Runs one captain turn on the Codex CLI (`codex exec --json`), as the last
-// link of the provider chain. Codex picks its own thread ids, so Majordomo's
+// link of the provider chain. Codex picks its own thread ids, so Wednesday's
 // session ids are mapped to them in <data>/codex-threads.json. Codex reports
 // no context window, so on Codex the captain rotates on its turn cap.
 import { spawn } from 'node:child_process'

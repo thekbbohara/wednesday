@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
+import { pageFromUrl, pageUrl, type PageId } from "./routes";
+export type { PageId } from "./routes";
 
 export const PAGES = [
   { id: "command", label: "Command Center", icon: "M4.5 6.5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H11l-4.5 3.5v-3.5h0a2 2 0 0 1-2-2Z" },
   { id: "skills", label: "Skills", icon: "M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9Z" },
   { id: "tasks", label: "Tasks", icon: "M9.5 6.5h10M9.5 12h10M9.5 17.5h10M4.5 6.5l1 1 2-2M4.5 12l1 1 2-2M4.5 17.5l1 1 2-2" },
   { id: "memory", label: "Memory", icon: "M12 4.5c-4.4 0-7.5 1.3-7.5 3v9c0 1.7 3.1 3 7.5 3s7.5-1.3 7.5-3v-9c0-1.7-3.1-3-7.5-3ZM4.5 7.5c0 1.7 3.1 3 7.5 3s7.5-1.3 7.5-3M4.5 12c0 1.7 3.1 3 7.5 3s7.5-1.3 7.5-3" },
+  { id: "credits", label: "Usage & credits", icon: "M4 6h16v12H4ZM4 9h16M15 14h2" },
   {
     id: "settings",
     label: "Settings",
@@ -12,24 +15,20 @@ export const PAGES = [
   },
 ] as const;
 
-export type PageId = (typeof PAGES)[number]["id"];
-
-const isPage = (s: string): s is PageId => PAGES.some((p) => p.id === s);
-
-/** The page lives in the URL hash (#/tasks), so reloads and back/forward keep it. */
+/** Usage has its own /usages URL; existing page hashes remain compatible. */
 export function usePage(): [PageId, (p: PageId) => void] {
-  const read = (): PageId => {
-    const h = location.hash.replace(/^#\/?/, "");
-    return isPage(h) ? h : "command";
-  };
+  const read = (): PageId => pageFromUrl(location);
   const [page, setPage] = useState<PageId>(read);
   useEffect(() => {
     const on = () => setPage(read());
     addEventListener("hashchange", on);
-    return () => removeEventListener("hashchange", on);
+    addEventListener("popstate", on);
+    return () => { removeEventListener("hashchange", on); removeEventListener("popstate", on); };
   }, []);
   const go = (p: PageId) => {
-    if (p !== page) location.hash = p === "command" ? "" : `/${p}`;
+    const target = pageUrl(p, location.search);
+    if (location.pathname + location.search + location.hash !== target) history.pushState(null, "", target);
+    setPage(p);
   };
   return [page, go];
 }

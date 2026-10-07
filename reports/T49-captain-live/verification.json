@@ -1,0 +1,117 @@
+{
+  "checkedAt": "2026-10-07T20:06:34.480Z",
+  "health": {
+    "ok": true
+  },
+  "livePid": 2533269,
+  "livePath": "/home/kb26/.jarvis/worktrees/agysetup",
+  "codeCommit": "704bce73819782407681c069ee8bed58cfa3b65d",
+  "hostingPane": "%9",
+  "data": {
+    "meta": {
+      "before": 5,
+      "after": 5,
+      "missing": 0,
+      "changed": 0
+    },
+    "ledger": {
+      "before": 2458,
+      "after": 2458,
+      "missing": 0,
+      "changed": 0
+    },
+    "facts": {
+      "before": 116,
+      "after": 116,
+      "missing": 0,
+      "changed": 0
+    },
+    "tasks": {
+      "before": 49,
+      "after": 49,
+      "missing": 0,
+      "changed": 0
+    },
+    "now": {
+      "before": 1,
+      "after": 1,
+      "missing": 0,
+      "changed": 0
+    },
+    "sessions": {
+      "before": 44,
+      "after": 44,
+      "missing": 0,
+      "changed": 0
+    },
+    "agents": {
+      "before": 65,
+      "after": 65,
+      "missing": 0,
+      "changed": 0
+    },
+    "exp": {
+      "before": 113,
+      "after": 113,
+      "missing": 0,
+      "changed": 0
+    }
+  },
+  "schemaUnchanged": true,
+  "ownerCheckoutUnchanged": true,
+  "priorCheckoutUnchanged": true,
+  "protectedFilesUnchangedExceptAuthorizedEngineSelection": true,
+  "selectedEngine": "agy",
+  "selectedModel": "claude-opus-4-6-thinking",
+  "nextTurnBoundary": true,
+  "lastSessionProvider": "codex",
+  "composerSelectionVerified": true,
+  "furtherMcpCallNeeded": false,
+  "workerPanesUnchanged": true,
+  "runningWorkers": [
+    {
+      "id": "agysetup",
+      "runtime": "codex",
+      "status": "running"
+    },
+    {
+      "id": "ctxedit",
+      "runtime": "codex",
+      "status": "running"
+    },
+    {
+      "id": "runtimecredits",
+      "runtime": "codex",
+      "status": "running"
+    }
+  ],
+  "agyStatus": "available",
+  "agyAllowances": [
+    {
+      "label": "Gemini Models · Weekly Limit Remaining",
+      "remainingPercent": 100,
+      "resetsAt": "2026-10-14T20:10:39.000Z"
+    },
+    {
+      "label": "Gemini Models · Five Hour Limit Remaining",
+      "remainingPercent": 100,
+      "resetsAt": "2026-10-08T01:10:39.000Z"
+    },
+    {
+      "label": "Claude and GPT models · Weekly Limit Remaining",
+      "remainingPercent": 100,
+      "resetsAt": "2026-10-14T20:10:39.000Z"
+    },
+    {
+      "label": "Claude and GPT models · Five Hour Limit Remaining",
+      "remainingPercent": 100,
+      "resetsAt": "2026-10-08T01:10:39.000Z"
+    },
+    {
+      "label": "AI credits",
+      "remaining": "0 credits",
+      "resetsAt": null
+    }
+  ],
+  "agentsApiOkay": true
+}

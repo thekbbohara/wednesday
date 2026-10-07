@@ -1,4 +1,5 @@
-// MCP server exposing Majordomo memory to the captain (stdio).
+import { assistantEnv } from '../env.ts'
+// MCP server exposing Wednesday memory to the captain (stdio).
 // Env: MAJORDOMO_DB (memory file), MAJORDOMO_SESSION (captain session id, for the ledger).
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
@@ -7,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname } from 'node:path'
 import { loadConfig } from '../config.ts'
 import { apply, check, loadSettings, saveSettings } from '../settings.ts'
+import { ENGINES } from '../engines.ts'
 import { addSkill, DEFAULT_SKILLS, loadSkills, type Skill } from '../skills/skills.ts'
 import { FACT_KINDS, Memory, TASK_STATUSES, type Hit } from '../memory/store.ts'
 
@@ -21,9 +23,9 @@ export function buildServer(mem: Memory, session: string | null, agentApi: Agent
   const checkSkill = (s: string) => {
     if (s !== 'none' && !liveIds().includes(s)) throw new Error(`unknown skill "${s}"; use one of: ${liveIds().join(', ')}, none (or add one with skill_add)`)
   }
-  const skillHelp = `Skill this work trains (earns Majordomo EXP when created and when finished): ${skills.map((s) => `${s.id} (${s.covers})`).join('; ')}. Use "none" only for chores that fit no skill.`
+  const skillHelp = `Skill this work trains (earns Wednesday EXP when created and when finished): ${skills.map((s) => `${s.id} (${s.covers})`).join('; ')}. Use "none" only for chores that fit no skill.`
   const skillArg = z.string().describe(skillHelp)
-  const server = new McpServer({ name: 'majordomo', version: '0.1.0' })
+  const server = new McpServer({ name: 'wednesday', version: '0.1.0' })
 
   const ok = (data: unknown) => ({ content: [{ type: 'text' as const, text: typeof data === 'string' ? data : JSON.stringify(data, null, 2) }] })
   const fail = (e: unknown) => ({ isError: true, content: [{ type: 'text' as const, text: e instanceof Error ? e.message : String(e) }] })
@@ -214,7 +216,7 @@ export function buildServer(mem: Memory, session: string | null, agentApi: Agent
 /** Agent tools talk to the web server, which runs the supervisor. */
 function registerAgentTools(server: McpServer, api: AgentApi | null, settingsDir?: string) {
   const call = async (method: 'GET' | 'POST', path: string, body?: unknown) => {
-    if (!api) return { isError: true, content: [{ type: 'text' as const, text: 'Agents are unavailable: the Majordomo web server is not running (start it with `pnpm start`).' }] }
+    if (!api) return { isError: true, content: [{ type: 'text' as const, text: 'Agents are unavailable: the Wednesday web server is not running (start it with `pnpm start`).' }] }
     try {
       const res = await fetch(api.url + path, {
         method,
@@ -226,13 +228,13 @@ function registerAgentTools(server: McpServer, api: AgentApi | null, settingsDir
       if (!res.ok) return { isError: true, content: [{ type: 'text' as const, text: String(data.error ?? `${res.status} ${res.statusText}`) }] }
       return { content: [{ type: 'text' as const, text: typeof data.text === 'string' ? data.text : JSON.stringify(data, null, 2) }] }
     } catch (e) {
-      return { isError: true, content: [{ type: 'text' as const, text: `Could not reach the Majordomo server: ${(e as Error).message}` }] }
+      return { isError: true, content: [{ type: 'text' as const, text: `Could not reach the Wednesday server: ${(e as Error).message}` }] }
     }
   }
 
   server.registerTool('captain_engine_set', {
     description: 'Switch the captain engine when the owner requests it. Starts a fresh memory-backed session at the next turn boundary.',
-    inputSchema: { engine: z.enum(['claude', 'codex', 'kimi']), model: z.string().optional() },
+    inputSchema: { engine: z.enum(ENGINES), model: z.string().optional() },
   }, async ({ engine, model }) => {
     if (api) return call('POST', '/api/captain/engine', { engine, model })
     if (!settingsDir) return { isError: true, content: [{ type: 'text' as const, text: 'Captain settings directory is unavailable.' }] }
@@ -255,7 +257,7 @@ function registerAgentTools(server: McpServer, api: AgentApi | null, settingsDir
         'You are woken when it ends a turn, needs an answer, or dies; do not poll.',
       inputSchema: {
         name: z.string().describe('Short lowercase name, e.g. "scraper". Never reused.'),
-        runtime: z.string().default('claude-code').describe('claude-code (default), codex, pi, kimi or opencode'),
+        runtime: z.string().default('claude-code').describe('claude-code (default), codex, pi, kimi, opencode or agy (Gemini by default)'),
         brief: z.string().min(1),
         task_id: z.number().int().optional(),
         repo: z.string().optional(),
@@ -318,13 +320,13 @@ function fmtHit(h: Hit): string {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const db = process.env.MAJORDOMO_DB
+  const db = assistantEnv('DB')
   if (!db) {
-    console.error('MAJORDOMO_DB is required')
+    console.error('WEDNESDAY_DB (or MAJORDOMO_DB) is required')
     process.exit(2)
   }
   const mem = new Memory(db)
-  const url = process.env.MAJORDOMO_URL
-  const server = buildServer(mem, process.env.MAJORDOMO_SESSION || null, url ? { url, token: process.env.MAJORDOMO_TOKEN || undefined } : null, loadSkills(dirname(db)), dirname(db))
+  const url = assistantEnv('URL')
+  const server = buildServer(mem, assistantEnv('SESSION') || null, url ? { url, token: assistantEnv('TOKEN') || undefined } : null, loadSkills(dirname(db)), dirname(db))
   await server.connect(new StdioServerTransport())
 }

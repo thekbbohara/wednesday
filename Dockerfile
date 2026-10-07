@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Majordomo runs TypeScript directly on Node 22 (type stripping); only the UI is built.
+# Wednesday runs TypeScript directly on Node 22 (type stripping); only the UI is built.
 FROM node:22-bookworm-slim AS ui
 WORKDIR /app
 RUN corepack enable
@@ -37,7 +37,7 @@ COPY --from=ui --chown=node:node /app/dist ./dist
 USER node
 # A private temp dir: host folders mounted under /tmp (e.g. PROJECTS_DIR) make Docker create
 # their parents as root, and Claude Code refuses a /tmp/claude-<uid> it does not own.
-ENV HOME=/home/node TMPDIR=/home/node/.tmp MAJORDOMO_DATA_DIR=/data HOST=0.0.0.0 PORT=4788 NODE_OPTIONS=--disable-warning=ExperimentalWarning
+ENV HOME=/home/node TMPDIR=/home/node/.tmp WEDNESDAY_DATA_DIR=/data HOST=0.0.0.0 PORT=4788 NODE_OPTIONS=--disable-warning=ExperimentalWarning
 EXPOSE 4788
 HEALTHCHECK --interval=30s --timeout=5s CMD node -e "fetch('http://127.0.0.1:4788/api/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["node", "src/server.ts"]

@@ -1,0 +1,25 @@
+{
+  "url": "http://127.0.0.1:4808",
+  "originalEngine": "codex",
+  "sqliteOpened": false,
+  "persistence": false,
+  "liveSources": "GET /api/chat, /api/tasks, /api/memory only",
+  "toolCount": 19,
+  "nowGet": true,
+  "engineTool": true,
+  "nonUsageBlocked": true,
+  "usageRoute": true,
+  "usageReplyCharacters": 2181,
+  "runnerCalls": 0,
+  "settings": {
+    "engine": "codex",
+    "engineModel": "",
+    "model": "opus",
+    "web": true,
+    "rotateAt": 0.5,
+    "maxTurns": 50,
+    "sleepAt": "04:00",
+    "sleepModel": "haiku",
+    "claudeConfigDir": "~/.claude-work"
+  }
+}

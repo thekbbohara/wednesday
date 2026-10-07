@@ -1,25 +1,29 @@
 # Web chat:        docker compose up -d        -> http://127.0.0.1:4788
-# Terminal chat:   docker compose exec majordomo node src/cli.ts
-# Watch an agent:  docker compose exec majordomo tmux -L majordomo attach -t majordomo_<name>
+# Terminal chat:   docker compose exec wednesday node src/cli.ts
+# Watch an agent:  docker compose exec wednesday tmux -L majordomo attach -t majordomo_<name>
 services:
-  majordomo:
+  wednesday:
     build:
       context: .
       args:
         UID: ${UID:-1000}
         GID: ${GID:-1000}
-    image: majordomo
+    image: wednesday
     restart: unless-stopped
     ports:
-      # Localhost only. To reach it from other devices, set MAJORDOMO_TOKEN and bind
+      # Localhost only. To reach it from other devices, set WEDNESDAY_TOKEN and bind
       # a private address (e.g. your Tailscale IP) instead of 127.0.0.1.
-      - ${MAJORDOMO_BIND:-127.0.0.1}:${MAJORDOMO_PORT:-4788}:4788
+      - ${WEDNESDAY_BIND:-${MAJORDOMO_BIND:-127.0.0.1}}:${WEDNESDAY_PORT:-${MAJORDOMO_PORT:-4788}}:4788
+    # Host publication is configurable; the server listens on the fixed container port.
+    environment:
+      WEDNESDAY_BIND: 0.0.0.0
+      WEDNESDAY_PORT: 4788
     env_file:
       - path: .env
         required: false
     volumes:
-      # Memory. A named volume by default; to use a host folder, create it first (mkdir) and set MAJORDOMO_DATA.
-      - ${MAJORDOMO_DATA:-majordomo-data}:/data
+      # Memory. A named volume by default; to use a host folder, create it first (mkdir) and set WEDNESDAY_DATA.
+      - ${WEDNESDAY_DATA:-${MAJORDOMO_DATA:-majordomo-data}}:/data
       # Claude Code and Codex logins (and their session transcripts).
       - ${HOME}/.claude:/home/node/.claude
       - ${HOME}/.claude.json:/home/node/.claude.json

@@ -1,0 +1,10 @@
+{
+  "backup": "/home/kb26/.jarvis/reviews/T50-20261007-180643/wednesday-telegram.service.before",
+  "unit": "/home/kb26/.config/systemd/user/wednesday-telegram.service",
+  "beforeSha256": "c35abaf1720e1a27f601190342baed84e839457072fd0aeed38abd5d14e0da80",
+  "afterSha256": "53bf702507944edd3cfe8ee5e1c67846a2054c33d4aca35d1f4c4d6cd74815e2",
+  "survivingPid": "2772094",
+  "restartPerformed": false,
+  "change": "Conflicts=majordomo-telegram.service only",
+  "daemonReload": true
+}

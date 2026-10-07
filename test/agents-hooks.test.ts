@@ -54,7 +54,7 @@ describe("turn hook script", () => {
     expect(received.at(-1)?.body.message).toBe("Done: tests pass.");
   });
 
-  it("never fails the agent: bad payload or Majordomo down still exits 0", async () => {
+  it("never fails the agent: bad payload or Wednesday down still exits 0", async () => {
     expect(await hook(["claude"], env(), "not json")).toBe(0);
     const down = { ...env(), MAJORDOMO_URL: "http://127.0.0.1:9" };
     expect(await hook(["claude"], down, JSON.stringify({ last_assistant_message: "x" }))).toBe(0);

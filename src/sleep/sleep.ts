@@ -84,7 +84,7 @@ export class ClaudeSleepModel implements SleepModel {
       '--strict-mcp-config',
       '--tools', '',
       '--no-session-persistence',
-      '--system-prompt', readFileSync(this.opts.promptFile, 'utf8').replaceAll('{{NAME}}', this.opts.name ?? 'Majordomo'),
+      '--system-prompt', readFileSync(this.opts.promptFile, 'utf8').replaceAll('{{NAME}}', this.opts.name ?? 'Wednesday'),
       '--json-schema', JSON.stringify(OPS_SCHEMA),
     ]
     return new Promise((resolve, reject) => {

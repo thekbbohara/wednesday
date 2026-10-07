@@ -23,7 +23,7 @@ describe('Codex worker permissions', () => {
     expect(start).toHaveBeenCalledWith(
       'majordomo_testcodex', dataDir,
       expect.stringMatching(/^(unset CLAUDE_CONFIG_DIR; )?codex --dangerously-bypass-approvals-and-sandbox -c .*notify=/),
-      { MAJORDOMO_AGENT: 'testcodex', MAJORDOMO_URL: 'http://localhost:4788' },
+      { WEDNESDAY_AGENT: 'testcodex', MAJORDOMO_AGENT: 'testcodex', WEDNESDAY_URL: 'http://localhost:4788', MAJORDOMO_URL: 'http://localhost:4788' },
     )
   })
 

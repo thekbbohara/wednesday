@@ -1,0 +1,25 @@
+[
+  {
+    "requested": "claude-opus-4-6-thinking",
+    "reported": {
+      "id": "claude-opus-4-6-thinking",
+      "label": "Claude Opus 4.6 (Thinking)",
+      "is_default": false
+    },
+    "status": "SUCCESS",
+    "turns": 0,
+    "total_tokens": 0
+  },
+  {
+    "requested": "gemini-3.8-flash-medium",
+    "reported": {
+      "id": "gemini-3.8-flash-medium",
+      "label": "Gemini 3.8 Flash (Medium)",
+      "effort": "medium",
+      "is_default": false
+    },
+    "status": "SUCCESS",
+    "turns": 0,
+    "total_tokens": 0
+  }
+]

@@ -1,4 +1,5 @@
-// Majordomo web server: the chat API, live events, and the built UI.
+import { assistantEnv } from './env.ts'
+// Wednesday web server: the chat API, live events, and the built UI.
 import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
@@ -20,6 +21,8 @@ import { loadSkills, type Skill } from './skills/skills.ts'
 import { apply, check, parseEngineCommand, currentSettings, loadSettings, MODELS, saveSettings, type Settings } from './settings.ts'
 import { EXP_RULES, OVERALL_SCALE, progress, type Progress } from './skills/levels.ts'
 import { startSleepSchedule } from './sleep/schedule.ts'
+import { isUsageCommand, validUsageCommand, usageReport } from './credits-command.ts'
+import { Credits } from './credits.ts'
 import { claudeAccount } from './claude-account.ts'
 
 export interface Agent {
@@ -41,9 +44,9 @@ export interface Status {
   thinking: boolean
   agents: Agent[]
   model: string
-  /** When Majordomo last replied, for "Active 2m ago". */
+  /** When Wednesday last replied, for "Active 2m ago". */
   lastReplyAt: string | null
-  /** Majordomo overall, from all EXP. */
+  /** Wednesday overall, from all EXP. */
   majordomo: Progress
   skills: SkillView[]
   /** Tasks waiting on the owner, for the nav badge. */
@@ -69,6 +72,8 @@ export function createApp(opts: {
   agents?: () => Agent[]
   /** Write settings changes to <data>/settings.json (off in tests). */
   persistSettings?: boolean
+  /** Inject read-only quota sources in tests without provider requests. */
+  credits?: Pick<Credits, 'read'>
 }) {
   const { mem, cfg, token, supervisor: sup } = opts
   // A single runner (tests/demo) is used for every provider; otherwise build per provider.
@@ -135,15 +140,21 @@ export function createApp(opts: {
     app.use('*', async (c, next) => {
       const url = new URL(c.req.url)
       if (url.searchParams.get('token') === token) {
-        c.header('set-cookie', `majordomo_token=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000`)
+        c.header('set-cookie', `wednesday_token=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000`)
         return next()
       }
-      const cookie = c.req.header('cookie')?.match(/(?:^|;\s*)majordomo_token=([^;]+)/)?.[1]
+      const cookie = c.req.header('cookie')?.match(/(?:^|;\s*)(?:wednesday|majordomo)_token=([^;]+)/)?.[1]
       const bearer = c.req.header('authorization')?.replace(/^Bearer\s+/i, '')
       if (cookie === token || bearer === token) return next()
-      return c.text('majordomo: open /?token=<MAJORDOMO_TOKEN> once to sign in', 401)
+      return c.text('wednesday: open /?token=<WEDNESDAY_TOKEN> once to sign in', 401)
     })
   }
+
+  const credits = opts.credits ?? new Credits()
+  app.get('/api/credits', async (c) => {
+    c.header('Cache-Control', 'no-store')
+    return c.json(await credits.read(cfg))
+  })
 
   app.get('/api/healthz', (c) => c.json({ ok: true }))
 
@@ -159,6 +170,16 @@ export function createApp(opts: {
     if (!text) return c.json({ error: 'empty message' }, 400)
     if (text.length > MAX_MESSAGE_CHARS) return c.json({ error: `message is over ${MAX_MESSAGE_CHARS} characters` }, 413)
     const owner = captain.receive(text)
+    if (isUsageCommand(text)) {
+      let report = 'Usage: /usages (alias /usage).'
+      if (validUsageCommand(text)) {
+        try { report = usageReport((await credits.read(cfg)).accounts) }
+        catch { report = 'Runtime usage unavailable: local quota collection failed. No inference or login changes were attempted.' }
+      }
+      const reply = mem.append('captain', report)
+      tick()
+      return c.json({ item: toChatItem(owner), reply: toChatItem(reply) })
+    }
     try {
       const patch = parseEngineCommand(text)
       if (patch) {
@@ -207,7 +228,7 @@ export function createApp(opts: {
     const body = await c.req.json().catch(() => null)
     const patch = { engine: body?.engine, engineModel: body?.model ?? '' }
     const errors = check(patch)
-    if (!body?.engine || Object.keys(errors).length) return c.json({ error: 'Use claude, codex or kimi and a valid model.' }, 400)
+    if (!body?.engine || Object.keys(errors).length) return c.json({ error: 'Use claude, codex, kimi or agy and a valid model.' }, 400)
     apply(cfg, patch)
     if (opts.persistSettings) saveSettings(cfg)
     tick()
@@ -399,13 +420,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const mem = new Memory(cfg.dbPath, { nowBudgetChars: cfg.nowBudgetChars })
   // Getters, so changes made in Settings apply to the next turn.
 
-  const host = process.env.HOST || '127.0.0.1'
-  const port = Number(process.env.PORT || 4788)
-  const token = process.env.MAJORDOMO_TOKEN || undefined
-  if (!token && host !== '127.0.0.1' && host !== 'localhost') console.warn(`warning: listening on ${host} without MAJORDOMO_TOKEN`)
+  const host = assistantEnv('BIND') || process.env.HOST || '127.0.0.1'
+  const port = Number(assistantEnv('PORT') || process.env.PORT || 4788)
+  const token = assistantEnv('TOKEN') || undefined
+  if (!token && host !== '127.0.0.1' && host !== 'localhost') console.warn(`warning: listening on ${host} without WEDNESDAY_TOKEN`)
   // Where agents' hooks and the captain's tools reach this server (loopback when listening on all addresses).
   const selfUrl = `http://${host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host}:${port}`
-  const supervisor = new Supervisor({ mem, name: cfg.name, dataDir: cfg.dataDir, socket: process.env.MAJORDOMO_TMUX_SOCKET || 'majordomo', hook: { url: selfUrl, token }, claudeConfigDir: () => cfg.claudeConfigDir })
+  const supervisor = new Supervisor({ mem, name: cfg.name, dataDir: cfg.dataDir, socket: assistantEnv('TMUX_SOCKET') || 'majordomo', hook: { url: selfUrl, token }, claudeConfigDir: () => cfg.claudeConfigDir })
   supervisor.start()
   const { app } = createApp({ mem, cfg, runnerFor: (p) => buildRunner(p, cfg), token, supervisor, selfUrl, persistSettings: true, webRoot: resolve(import.meta.dirname, '../dist') })
   startSleepSchedule(mem, cfg, new ClaudeSleepModel({ bin: cfg.claudeBin, model: () => cfg.sleepModel, promptFile: cfg.sleepPromptFile, timeoutSec: cfg.turnTimeout, cwd: cfg.dataDir, name: cfg.name, configDir: () => cfg.claudeConfigDir }))
