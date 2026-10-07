@@ -10,11 +10,20 @@ import { Memory } from './memory/store.ts'
 import { Captain, type Reply } from './captain/captain.ts'
 import { buildRunner } from './captain/chain.ts'
 
+import { Credits } from './credits.ts'
+import { isUsageCommand, validUsageCommand, usageReport } from './credits-command.ts'
 import { loadSettings, parseEngineCommand, apply, saveSettings } from './settings.ts'
 
 const cfg = loadConfig()
 mkdirSync(cfg.dataDir, { recursive: true })
 loadSettings(cfg)
+const credits = new Credits()
+const quotaReply = async (text: string) => validUsageCommand(text) ? usageReport((await credits.read(cfg)).accounts) : 'Usage: /usages (alias /usage).'
+// Quota-only asks do not open the database, create sessions, or invoke the captain.
+if (process.argv[2] === 'ask' && isUsageCommand(process.argv.slice(3).join(' '))) {
+  console.log(await quotaReply(process.argv.slice(3).join(' ')))
+  process.exit(0)
+}
 const mem = new Memory(cfg.dbPath, { nowBudgetChars: cfg.nowBudgetChars })
 const captain = new Captain(mem, cfg, (p) => buildRunner(p, cfg))
 
@@ -27,9 +36,10 @@ function status(r: Reply): string {
   return dim(`[L${r.ledgerId}${pct}${r.rotated ? ` - session rotated: ${r.rotated}` : ''}]`)
 }
 
-const HELP = `/now  /tasks  /facts  /search <words>  /get <F1|T1|L1>  /rotate  /sessions  /engine [claude|codex|kimi] [model]  /help  /quit`
+const HELP = `/usages (/usage)  /now  /tasks  /facts  /search <words>  /get <F1|T1|L1>  /rotate  /sessions  /engine [claude|codex|kimi] [model]  /help  /quit`
 
 async function command(line: string): Promise<boolean> {
+  if (isUsageCommand(line)) { console.log(await quotaReply(line)); return true }
   try {
     const engine = parseEngineCommand(line)
     if (engine) {

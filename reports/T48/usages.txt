@@ -1,0 +1,16 @@
+Runtime usage (provider-reported; UTC reset times; 60s cache):
+- Claude Code · ~/.claude: 5-hour allowance: 100% left; reset not reported | Weekly allowance: 2% left; resets 2026-10-09 02:00:00 UTC | Provider allowance · iguana_necktie: 100% left / 100 USD (reported); resets 2026-11-05 07:59:00 UTC
+  Extra usage: disabled.
+- Claude Code · ~/.claude-work: 5-hour allowance: 0% left; resets 2026-10-07 21:00:00 UTC | Weekly allowance: 61% left; resets 2026-10-09 16:00:00 UTC
+  Extra usage: disabled.
+- Codex · ~/.codex · 2653e11b-5630-4310-81f6-caf0a5d5fbd6: Account · 5h: 83% left; resets 2026-10-07 23:17:46 UTC | Account · 7 days: 66% left; resets 2026-10-14 06:23:52 UTC | Credits: 0 credits; reset not reported
+- pi / openai-codex · ~/.pi/agent · 8b908b16-7e1c-4280-a165-ac3e8b39217d: Account · 30 days: 99% left; resets 2026-10-25 09:10:58 UTC
+- pi / openrouter · ~/.pi/agent: Account credit balance: 4.122558 USD; reset not reported | Per-key spending cap: No cap reported; reset not reported
+  Balance = provider-reported purchased credits minus provider-reported account usage. Key caps are separate.
+- pi / anthropic · ~/.pi/agent: unavailable - Provider returned HTTP 429.
+- Kimi · ~/.kimi-code/credentials/kimi-code-env-0e4f99c69cc27850.json: unavailable - No OAuth access token in the local credential file (empty or unsupported). No login or refresh was attempted.
+- Kimi · ~/.kimi-code/credentials/kimi-code.json: unavailable - No OAuth access token in the local credential file (empty or unsupported). No login or refresh was attempted.
+- opencode · ~/.local/share/opencode: unavailable - No readable provider entries in OpenCode auth.json. No account quota can be attributed from this local source.
+- agy (Gemini) · Configured runtime: unavailable - This runtime has no supported account quota collector. Context and token counts are not account credit.
+Reports: 2026-10-07 18:29:04 UTC to 2026-10-07 18:29:05 UTC.
+Last check: 2026-10-07 18:29:04 UTC. Credits page has sources and per-account freshness.

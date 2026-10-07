@@ -166,7 +166,7 @@ export const api = {
     ),
   send: (text: string) =>
     fetch("/api/messages", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) }).then((r) =>
-      json<{ item: ChatItem }>(r),
+      json<{ item: ChatItem; reply?: ChatItem }>(r),
     ),
   retry: (id: number) =>
     fetch("/api/retry", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) }).then((r) =>

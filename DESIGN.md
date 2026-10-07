@@ -32,8 +32,8 @@ all day next to dark terminals.
   gap 16. Below, gap 16: the page card fills the remaining height. The page
   itself never scrolls on desktop; only the content inside the page card does.
 - Pages: **Command Center** (default), **Skills**, **Tasks**, **Memory**,
-  **Settings**. The current page lives in the URL hash (`#/tasks`) so reloads
-  and the back button keep it. The chat stays mounted while another page is
+  **Runtime usage and credits**, **Settings**. Runtime usage lives at `/usages`;
+  other pages use the URL hash (`#/tasks`) so reloads and the back button keep it. The chat stays mounted while another page is
   open, so its scroll position and draft survive.
 - Session rotation is invisible; the chat is the ledger.
 
@@ -185,9 +185,55 @@ pi #b28cf5, opencode #4fd1a5, kimi #f78fb3, other #8fb3c9.
 - 760-1099: the nav becomes a horizontal pill above the top band (buttons in
   a row, same order); portrait 260 wide; same 236 band.
 - < 760: single column, 12px gutters, page scrolls only inside the thread.
-  The nav is a bottom tab bar (5 buttons, 56 tall, safe-area inset) instead
+  The nav is a bottom tab bar (6 buttons, 56 tall, safe-area inset) instead
   of a pill. Compact portrait (face 52, name, level, EXP bar in one row), roster as one horizontally scrolling
   row of 44px faces with the stats line; the Command Center takes the rest
   of the height (100dvh). Bubbles max 88%; composer respects the safe-area
   inset and the on-screen keyboard.
 - Verified at 375, 768, 1024, 1440.
+
+
+## Runtime usage and credits (T48)
+
+Reason: the owner needs to choose among authenticated runtimes using account
+allowances, so usage gets the dedicated /usages page, a prominent link at the top of
+Settings, and a nav item between Memory and Settings.
+The existing light roster system remains the design source: white page card,
+--panel-2 account cards, --line dividers, 18px radius and 16px grid gaps.
+
+- Account grid: columns at least 320px, collapsing to one column on phones.
+  Use the existing page__body so all providers remain reachable by scrolling
+  inside the page card. Keep the title and Refresh control pinned in PageHead.
+- Card: runtime name at 17px, status pill at 11px, local credential source path
+  and non-secret account id at 11px mono. Long ids wrap instead of overflowing.
+- Allowance rows: independent provider windows, 13px label and bold remaining
+  percentage. An 8px rounded bar shows remaining allowance, blue-deep normally
+  and #c84949 at 10% or less. Unknown remaining values never get a bar.
+- Provider-specific allowances retain their reported scope. Opaque provider
+  names remain visible without guessing their meaning. Credit balances and
+  spending caps get separate rows; no cap never implies unlimited funds.
+- Status: Reported uses #d9f3e9 / #17684d; Stale uses #fff0d7 / #845000;
+  Unavailable uses the existing neutral line color. Reasons are readable
+  #a33939 text, with no credential values or raw provider error bodies.
+- Show source, fetched time and last check time on every card. Dates include
+  the browser timezone. Missing reset times say "Reset time not reported".
+  Stale data keeps its original fetched time and an explicit warning.
+- Refresh is at least 44px tall. Explain the 60-second cache beside the grid;
+  polling happens only while this page is mounted. Never substitute session
+  context, local token usage, model prices or a spending cap for account funds.
+- Mobile nav has six equal controls, each at least 44px wide at 375px. The
+  chat stays mounted and its composer draft survives navigation as before.
+
+The Settings entry is a --panel-2 inset card with a 44px minimum-height link
+labelled "View all runtime usage and credits". Its real href is /usages; normal
+clicks use history navigation so the mounted chat and draft survive. Direct
+navigation, reload, back/forward and the older #/credits link resolve correctly.
+/usages and /usage chat commands share these collectors, record a concise
+provider report, and never invoke an inference turn. Chat reset times are
+explicit UTC; the page shows browser-local times with timezone abbreviations.
+
+## Known gaps
+
+The existing design contract is prose-only and has no YAML token front matter.
+The design.md linter reports this as one warning and zero errors. T48 preserves
+that established format rather than rewriting the unrelated design contract.

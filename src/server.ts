@@ -20,6 +20,8 @@ import { loadSkills, type Skill } from './skills/skills.ts'
 import { apply, check, parseEngineCommand, currentSettings, loadSettings, MODELS, saveSettings, type Settings } from './settings.ts'
 import { EXP_RULES, OVERALL_SCALE, progress, type Progress } from './skills/levels.ts'
 import { startSleepSchedule } from './sleep/schedule.ts'
+import { isUsageCommand, validUsageCommand, usageReport } from './credits-command.ts'
+import { Credits } from './credits.ts'
 import { claudeAccount } from './claude-account.ts'
 
 export interface Agent {
@@ -69,6 +71,8 @@ export function createApp(opts: {
   agents?: () => Agent[]
   /** Write settings changes to <data>/settings.json (off in tests). */
   persistSettings?: boolean
+  /** Inject read-only quota sources in tests without provider requests. */
+  credits?: Pick<Credits, 'read'>
 }) {
   const { mem, cfg, token, supervisor: sup } = opts
   // A single runner (tests/demo) is used for every provider; otherwise build per provider.
@@ -145,6 +149,12 @@ export function createApp(opts: {
     })
   }
 
+  const credits = opts.credits ?? new Credits()
+  app.get('/api/credits', async (c) => {
+    c.header('Cache-Control', 'no-store')
+    return c.json(await credits.read(cfg))
+  })
+
   app.get('/api/healthz', (c) => c.json({ ok: true }))
 
   app.get('/api/chat', (c) => {
@@ -159,6 +169,16 @@ export function createApp(opts: {
     if (!text) return c.json({ error: 'empty message' }, 400)
     if (text.length > MAX_MESSAGE_CHARS) return c.json({ error: `message is over ${MAX_MESSAGE_CHARS} characters` }, 413)
     const owner = captain.receive(text)
+    if (isUsageCommand(text)) {
+      let report = 'Usage: /usages (alias /usage).'
+      if (validUsageCommand(text)) {
+        try { report = usageReport((await credits.read(cfg)).accounts) }
+        catch { report = 'Runtime usage unavailable: local quota collection failed. No inference or login changes were attempted.' }
+      }
+      const reply = mem.append('captain', report)
+      tick()
+      return c.json({ item: toChatItem(owner), reply: toChatItem(reply) })
+    }
     try {
       const patch = parseEngineCommand(text)
       if (patch) {

@@ -389,7 +389,7 @@ function SearchResults({ hits, onRef }: { hits: Hit[]; onRef: OnRef }) {
 
 // ---------- Settings ----------
 
-export function SettingsPage({ name }: { name: string }) {
+export function SettingsPage({ name, onUsages }: { name: string; onUsages?: () => void }) {
   const { data, error } = useLoad(api.settings, 0);
   const [s, setS] = useState<Settings | null>(null);
   const [account, setAccount] = useState<ClaudeAccount | null>(null);
@@ -455,6 +455,14 @@ export function SettingsPage({ name }: { name: string }) {
       <PageHead title="Settings" />
       <div className="page__body">
         <div className="settings">
+          <div className="settings-usage">
+            <p className="micro">Runtime usage and credits</p>
+            <p>Remaining allowances, credit balances, reset times and account status for all agent runtimes.</p>
+            <a href="/usages" onClick={(e) => {
+              if (!onUsages || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+              e.preventDefault(); onUsages();
+            }}>View all runtime usage and credits <span aria-hidden="true">↗</span></a>
+          </div>
           <p className="micro">Captain</p>
           {row(
             "engine",

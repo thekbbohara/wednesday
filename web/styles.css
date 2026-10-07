@@ -2197,3 +2197,36 @@ button.chip:hover {
   font-size: 12px;
   color: #2fae84;
 }
+
+/* Provider allowance cards follow the existing light roster palette. */
+.credits-intro { color: var(--muted); margin: 0 0 20px; font-size: 13px; }
+.credits-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 16px; }
+.credit-card { background: var(--panel-2); border: 1px solid var(--line); border-radius: 18px; padding: 18px; min-width: 0; }
+.credit-card__head, .credit-window__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.credit-card h3 { font-size: 17px; margin: 0; }
+.credit-account { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; margin: 8px 0 16px; }
+.credit-state { font-size: 11px; border-radius: 999px; padding: 5px 9px; background: var(--line); }
+.credit-state--available { background: #d9f3e9; color: #17684d; }
+.credit-state--stale { background: #fff0d7; color: #845000; }
+.credit-window { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; }
+.credit-window__head { font-size: 13px; }
+.credit-window__head strong { font-variant-numeric: tabular-nums; }
+.credit-window progress { width: 100%; height: 8px; margin-top: 10px; accent-color: var(--blue-deep); }
+.credit-window progress.credit-low { accent-color: #c84949; }
+.credit-window p, .credit-note { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+.credit-meta { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); margin-top: 18px; }
+.credits-error { font-size: 13px; color: #a33939; line-height: 1.5; }
+.credits-refresh { border: 1px solid var(--line); border-radius: 999px; padding: 10px 16px; color: var(--blue-deep); background: var(--panel-2); cursor: pointer; min-height: 44px; }
+.credits-refresh:disabled { opacity: .6; cursor: wait; }
+.credit-window progress { appearance: none; border: 0; border-radius: 999px; overflow: hidden; background: var(--line); }
+.credit-window progress::-webkit-progress-bar { background: var(--line); border-radius: 999px; }
+.credit-window progress::-webkit-progress-value { background: var(--blue-deep); border-radius: 999px; }
+.credit-window progress.credit-low::-webkit-progress-value { background: #c84949; }
+.credit-window progress::-moz-progress-bar { background: var(--blue-deep); border-radius: 999px; }
+.credit-window progress.credit-low::-moz-progress-bar { background: #c84949; }
+.credits-summary { color: var(--muted); font-size: 12px; margin: -8px 0 16px; }
+.settings-usage { border: 1px solid var(--line); background: var(--panel-2); border-radius: 18px; padding: 16px; margin-bottom: 24px; }
+.settings-usage .micro { margin: 0 0 8px; }
+.settings-usage p:not(.micro) { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0 0 8px; }
+.settings-usage a { color: var(--blue-deep); font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; }
+.settings-usage a:focus-visible { outline: 2px solid var(--blue-deep); outline-offset: 4px; border-radius: 4px; }

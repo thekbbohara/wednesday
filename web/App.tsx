@@ -7,6 +7,7 @@ import { Cited } from "./Cited";
 import { Nav, usePage } from "./Nav";
 import { Reply } from "./Reply";
 import { MemoryPage, PageHead, SettingsPage, SkillsPage, TasksPage } from "./pages";
+import { CreditsPage } from "./Credits";
 import { Face, type Mood } from "./Face";
 import { buildRows, fullTime, splitCitations, type Row } from "./thread";
 
@@ -188,8 +189,8 @@ export function App() {
 
   const send = async (text: string) => {
     atBottom.current = true;
-    const { item } = await api.send(text);
-    setItems((cur) => mergeItems(cur, [item]));
+    const { item, reply } = await api.send(text);
+    setItems((cur) => mergeItems(cur, reply ? [item, reply] : [item]));
   };
 
   return (
@@ -262,9 +263,10 @@ export function App() {
               <MemoryPage version={version} onRef={openRef} name={status.name} />
             </div>
           )}
+          {page === "credits" && <div className="page__view"><CreditsPage /></div>}
           {page === "settings" && (
             <div className="page__view">
-              <SettingsPage name={status.name} />
+              <SettingsPage name={status.name} onUsages={() => goPage("credits")} />
             </div>
           )}
         </section>
