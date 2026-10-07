@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import type { Config } from './config.ts'
 import { contractHome } from './claude-account.ts'
 import { loadRuntimes } from './agents/runtimes.ts'
+import { readAgy, parseAgy, type AgyRead } from './agy-usage.ts'
 
 import type { Allowance, CreditAccount } from './credits-types.ts'
 type Obj = Record<string, any>
@@ -83,14 +84,17 @@ export function parseOpenRouter(credits: Obj, key: Obj = {}): Allowance[] {
   }
   return out
 }
-interface Target { id: string; runtime: string; folder: string; file?: string; kind?: 'claude' | 'codex' | 'kimi' | 'openrouter'; endpoint?: string; piKey?: string; reason?: string }
+interface Target { id: string; runtime: string; folder: string; file?: string; kind?: 'claude' | 'codex' | 'kimi' | 'openrouter' | 'agy'; endpoint?: string; piKey?: string; reason?: string }
 export class Credits {
   private cache = new Map<string, { result: CreditAccount; expires: number; signature: string; pending?: Promise<CreditAccount> }>()
   private request: typeof fetch
   private home: string
   private now: () => number
-  constructor(request: typeof fetch = fetch, home = homedir(), now = () => Date.now()) {
+  private agyRead: AgyRead
+  constructor(request: typeof fetch = fetch, home = homedir(), now = () => Date.now(), agyRead?: AgyRead) {
     this.request = request; this.home = home; this.now = now
+    // A synthetic credential root must never launch the real user's CLI.
+    this.agyRead = agyRead ?? (home === homedir() ? readAgy : async () => { throw new Error('No agy CLI reader for this credential root.') })
   }
   async read(cfg: Config): Promise<{ accounts: CreditAccount[]; cacheSeconds: number }> {
     const targets: Target[] = []
@@ -120,6 +124,12 @@ export class Credits {
     let runtimes
     try { runtimes = loadRuntimes(cfg.dataDir) } catch { runtimes = [{ id: 'runtime-config', label: 'Runtime configuration' }] }
     for (const r of runtimes) {
+      if (r.id === 'agy') {
+        // Metadata only, for cache invalidation when the CLI account changes.
+        targets.push({ id: 'agy', runtime: r.label, folder: 'agy CLI active account', kind: 'agy', file: join(this.home, '.gemini/antigravity-cli/antigravity-oauth-token') })
+        if ('command' in r && r.command !== 'agy') targets.push({ id: 'routing:agy', runtime: `${r.label} account routing`, folder: 'Custom launch command', reason: 'This custom launch command may select another account. The agy CLI quotas report the server environment account independently.' })
+        continue
+      }
       if ('command' in r && typeof r.command === 'string' && ['claude-code', 'codex', 'pi', 'kimi', 'opencode'].includes(r.id)) {
         const binary = r.id === 'claude-code' ? 'claude' : r.id
         // Do not execute or guess account routing hidden in owner-supplied shell commands.
@@ -150,9 +160,16 @@ export class Credits {
   }
   private async fetchTarget(t: Target, previous?: CreditAccount): Promise<CreditAccount> {
     const checkedAt = new Date(this.now()).toISOString()
-    const base: CreditAccount = { id: t.id, runtime: t.runtime, account: contractHome(t.folder), source: t.kind === 'claude' ? 'Anthropic OAuth usage' : t.kind === 'codex' ? 'ChatGPT WHAM usage' : t.kind === 'kimi' ? 'Kimi Code usages' : t.kind === 'openrouter' ? 'OpenRouter account credits and key cap' : 'Local configuration', status: 'unavailable', checkedAt, fetchedAt: null, reason: null, allowances: [] }
+    const base: CreditAccount = { id: t.id, runtime: t.runtime, account: contractHome(t.folder), source: t.kind === 'agy' ? 'Antigravity CLI /usage and /credits' : t.kind === 'claude' ? 'Anthropic OAuth usage' : t.kind === 'codex' ? 'ChatGPT WHAM usage' : t.kind === 'kimi' ? 'Kimi Code usages' : t.kind === 'openrouter' ? 'OpenRouter account credits and key cap' : 'Local configuration', status: 'unavailable', checkedAt, fetchedAt: null, reason: null, allowances: [] }
     try {
       if (t.reason) throw new Error(t.reason)
+      if (t.kind === 'agy') {
+        const results = await Promise.allSettled(['usage', 'credits'].map(command => this.agyRead(command as 'usage' | 'credits').then(d => parseAgy(d, command as 'usage' | 'credits'))))
+        const allowances = results.flatMap(r => r.status === 'fulfilled' ? r.value : [])
+        if (!allowances.length) throw new Error('No supported Antigravity CLI quota response. Requires agy with read-only JSON /usage and /credits support and an existing login. No inference or login was initiated.')
+        return { ...base, status: 'available', fetchedAt: new Date(this.now()).toISOString(), allowances,
+          note: `Models in each group share their windows. AI credits are separate.${results.some(r => r.status === 'rejected' || !r.value.length) ? ' One CLI quota source is unavailable.' : ''}` }
+      }
       let auth: Obj
       try { auth = JSON.parse(readFileSync(t.file!, 'utf8')); if (!object(auth)) throw new Error('Invalid credential shape') } catch { throw new Error('Local credentials are missing, unreadable, or malformed.') }
       if (t.kind === 'codex' && !t.piKey && ((typeof auth.auth_mode === 'string' && auth.auth_mode !== 'chatgpt') || typeof auth.OPENAI_API_KEY === 'string' && auth.OPENAI_API_KEY.length > 0)) throw new Error('No subscription quota for the active Codex API-key or unsupported auth mode. Stored ChatGPT token remnants are not queried.')

@@ -1,0 +1,43 @@
+[
+  {
+    "command": "usage",
+    "status": "SUCCESS",
+    "num_turns": 0,
+    "total_tokens": 0,
+    "allowances": [
+      {
+        "label": "Gemini Models · Weekly Limit Remaining",
+        "remainingPercent": 100,
+        "resetsAt": "2026-10-14T19:30:11.000Z"
+      },
+      {
+        "label": "Gemini Models · Five Hour Limit Remaining",
+        "remainingPercent": 100,
+        "resetsAt": "2026-10-08T00:30:11.000Z"
+      },
+      {
+        "label": "Claude and GPT models · Weekly Limit Remaining",
+        "remainingPercent": 100,
+        "resetsAt": "2026-10-14T19:30:11.000Z"
+      },
+      {
+        "label": "Claude and GPT models · Five Hour Limit Remaining",
+        "remainingPercent": 100,
+        "resetsAt": "2026-10-08T00:30:11.000Z"
+      }
+    ]
+  },
+  {
+    "command": "credits",
+    "status": "SUCCESS",
+    "num_turns": 0,
+    "total_tokens": 0,
+    "allowances": [
+      {
+        "label": "AI credits",
+        "remaining": "0 credits",
+        "resetsAt": null
+      }
+    ]
+  }
+]
