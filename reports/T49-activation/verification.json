@@ -1,0 +1,111 @@
+{
+  "checkedAt": "2026-10-07T19:38:36.793Z",
+  "health": {
+    "ok": true
+  },
+  "livePid": 2462644,
+  "livePath": "/home/kb26/.jarvis/worktrees/agysetup",
+  "codeCommit": "4db30a6b879865b4c1e0e5b3e681c609a831afef",
+  "hostingPane": "%9",
+  "data": {
+    "meta": {
+      "before": 5,
+      "after": 5,
+      "missing": 0,
+      "changed": 0
+    },
+    "ledger": {
+      "before": 2449,
+      "after": 2449,
+      "missing": 0,
+      "changed": 0
+    },
+    "facts": {
+      "before": 116,
+      "after": 116,
+      "missing": 0,
+      "changed": 0
+    },
+    "tasks": {
+      "before": 49,
+      "after": 49,
+      "missing": 0,
+      "changed": 0
+    },
+    "now": {
+      "before": 1,
+      "after": 1,
+      "missing": 0,
+      "changed": 0
+    },
+    "sessions": {
+      "before": 44,
+      "after": 44,
+      "missing": 0,
+      "changed": 0
+    },
+    "agents": {
+      "before": 65,
+      "after": 65,
+      "missing": 0,
+      "changed": 0
+    },
+    "exp": {
+      "before": 113,
+      "after": 113,
+      "missing": 0,
+      "changed": 0
+    }
+  },
+  "schemaUnchanged": true,
+  "ownerCheckoutUnchanged": true,
+  "priorCheckoutUnchanged": true,
+  "protectedFilesUnchanged": true,
+  "workerPanesUnchanged": true,
+  "runningWorkers": [
+    {
+      "id": "agysetup",
+      "runtime": "codex",
+      "status": "running"
+    },
+    {
+      "id": "ctxedit",
+      "runtime": "codex",
+      "status": "running"
+    },
+    {
+      "id": "runtimecredits",
+      "runtime": "codex",
+      "status": "running"
+    }
+  ],
+  "agyStatus": "available",
+  "agyAllowances": [
+    {
+      "label": "Gemini Models · Weekly Limit Remaining",
+      "remainingPercent": 100,
+      "resetsAt": "2026-10-14T19:42:38.000Z"
+    },
+    {
+      "label": "Gemini Models · Five Hour Limit Remaining",
+      "remainingPercent": 100,
+      "resetsAt": "2026-10-08T00:42:38.000Z"
+    },
+    {
+      "label": "Claude and GPT models · Weekly Limit Remaining",
+      "remainingPercent": 100,
+      "resetsAt": "2026-10-14T19:42:38.000Z"
+    },
+    {
+      "label": "Claude and GPT models · Five Hour Limit Remaining",
+      "remainingPercent": 100,
+      "resetsAt": "2026-10-08T00:42:38.000Z"
+    },
+    {
+      "label": "AI credits",
+      "remaining": "0 credits",
+      "resetsAt": null
+    }
+  ],
+  "agentsApiOkay": true
+}
