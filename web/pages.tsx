@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode }
 import { api, RUNTIME_COLOR, type ClaudeAccount, type ExpEvent, type Fact, type Hit, type Settings, type SkillView, type TaskRow } from "./api";
 import { Cited } from "./Cited";
 import { Face } from "./Face";
+import { Reply } from "./Reply";
 import { ExpBar, SkillIcon } from "./Skills";
 import { fullTime } from "./thread";
 
@@ -125,7 +126,7 @@ const STATUS: Record<TaskRow["status"], { label: string; tone: string }> = {
   cancelled: { label: "cancelled", tone: "offline" },
 };
 
-export function TasksPage({ version, skills, onRef }: { version: number; skills: Map<string, SkillView>; onRef: OnRef }) {
+export function TasksPage({ version, skills, onRef, name }: { version: number; skills: Map<string, SkillView>; onRef: OnRef; name: string }) {
   const { data, error } = useLoad(api.tasks, version);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["id"]>("open");
   const [open, setOpen] = useState<number | null>(null);
@@ -179,6 +180,11 @@ export function TasksPage({ version, skills, onRef }: { version: number; skills:
                       <Field label="Goal" text={t.goal} onRef={onRef} />
                       {t.plan && <Field label="Plan" text={t.plan} onRef={onRef} />}
                       {t.result && <Field label="Result" text={t.result} onRef={onRef} />}
+                      {t.status === "waiting_owner" && (
+                        <div className="row__reply">
+                          <Reply placeholder={`Reply to ${name} about T${t.id}`} onSend={(text) => api.send(`About T${t.id} (${t.title}): ${text}`)} sent={`Sent to ${name}. The reply shows in the Command Center.`} />
+                        </div>
+                      )}
                       <p className="row__meta">
                         {sk ? `${sk.name} · ` : ""}created {shortTime(t.created_at)}
                       </p>

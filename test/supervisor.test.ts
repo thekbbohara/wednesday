@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Memory, type LedgerEntry } from '../src/memory/store.ts'
 import { composeBrief, Supervisor } from '../src/agents/supervisor.ts'
+import { toChatItem } from '../src/web/chat.ts'
 
 const FIX = join(import.meta.dirname, '../src/agents/fixtures')
 const socket = `majordomo-test-${process.pid}`
@@ -86,8 +87,18 @@ describe('supervisor', () => {
     expect(events.filter((e) => e.entry.meta?.event === 'needs')).toHaveLength(1)
 
     await expect(sup.answer('asker', 'Maybe')).rejects.toThrow(/not an option/)
-    await sup.answer('asker', 'Yes, I trust this folder')
+    await sup.answer('asker', 'Yes, I trust this folder', 'owner')
     expect(await until(async () => (await sup.screen('asker')).includes('picked: Yes') || null)).toBeTruthy()
+
+    // The chat shows what was asked (without the menu) and the owner's answer.
+    const asked = toChatItem(needs.entry)
+    expect(asked).toMatchObject({ type: 'agent', event: 'needs', text: 'needs an answer: trust prompt' })
+    expect(asked?.type === 'agent' && asked.prompt).toMatch(/trust/i)
+    expect(asked?.type === 'agent' && asked.prompt).not.toContain('No, exit')
+    const answered = events.find((e) => e.entry.meta?.event === 'answer')!
+    expect(answered.wake).toBe(false)
+    expect(answered.entry.meta?.by).toBe('owner')
+    expect(toChatItem(answered.entry)).toMatchObject({ type: 'agent', agent: 'asker', text: 'got your answer: Yes, I trust this folder' })
   })
 
   it('accepts the trust prompt itself for a worktree it made, on a fresh branch', { timeout: 30_000 }, async () => {
@@ -179,5 +190,6 @@ describe('composeBrief', () => {
     expect(b).toContain('Friday reads only your final message')
     expect(b).toContain('on branch majordomo/fixer')
     expect(b).toContain('end your turn with a short report')
+    expect(b).toContain('Make reasonable calls yourself')
   })
 })

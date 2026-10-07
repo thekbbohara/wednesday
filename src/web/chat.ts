@@ -8,7 +8,7 @@ export type ChatItem =
   | { type: 'owner' | 'captain'; id: number; ts: string; text: string }
   | { type: 'receipt'; id: number; ts: string; verb: string; ref: string }
   | { type: 'error'; id: number; ts: string; text: string }
-  | { type: 'agent'; id: number; ts: string; agent: string; event: string; text: string }
+  | { type: 'agent'; id: number; ts: string; agent: string; event: string; text: string; prompt?: string }
   | { type: 'digest'; id: number; ts: string; text: string }
   | { type: 'levelup'; id: number; ts: string; skill: string; level: number }
   | { type: 'newskill'; id: number; ts: string; skill: string; name: string; color: string }
@@ -16,6 +16,8 @@ export type ChatItem =
 const SHOWN = ['owner', 'captain', 'fact', 'task', 'decision', 'now', 'system', 'agent', 'digest'] as const
 /** Agent events the owner sees; the captain's own messages and answers to agents stay in the ledger. */
 const SHOWN_AGENT_EVENTS = new Set(['spawn', 'report', 'needs', 'exit', 'error', 'stop'])
+/** The owner's own answers and replies to agents show, so a click in the chat leaves a trace there. */
+const OWNER_AGENT_EVENTS = new Set(['answer', 'message'])
 
 export function toChatItem(e: LedgerEntry): ChatItem | null {
   const base = { id: e.id, ts: e.ts }
@@ -33,9 +35,11 @@ export function toChatItem(e: LedgerEntry): ChatItem | null {
       return e.meta?.silent ? null : { ...base, type: e.kind, text: e.text }
     case 'agent': {
       const event = String(e.meta?.event ?? '')
-      if (!SHOWN_AGENT_EVENTS.has(event)) return null
+      if (!SHOWN_AGENT_EVENTS.has(event) && !(OWNER_AGENT_EVENTS.has(event) && e.meta?.by === 'owner')) return null
       const agent = String(e.meta?.agent ?? '')
-      return { ...base, type: 'agent', agent, event, text: agentLine(event, agent, e) }
+      const item: ChatItem = { ...base, type: 'agent', agent, event, text: agentLine(event, agent, e) }
+      if (event === 'needs') item.prompt = promptOf(e)
+      return item
     }
     case 'fact': {
       const id = e.meta?.fact
@@ -76,12 +80,34 @@ function agentLine(event: string, agent: string, e: LedgerEntry): string {
       return 'finished a turn'
     case 'needs':
       return `needs an answer: ${String(e.meta?.reason ?? 'prompt')}`
+    case 'answer':
+      return `got your answer: ${e.text.replace(/^.*? answered \S+: /, '')}`
+    case 'message':
+      return `got your reply: ${e.text.replace(/^.*? to \S+: /, '')}`
     case 'spawn':
       // The full path is in the ledger entry; the chat line names the folder only.
       return first.replace(/ in (\/\S+)$/, (_, p: string) => ` in ${p.split('/').filter(Boolean).pop()}`)
     default:
       return first
   }
+}
+
+/**
+ * What the agent is asking: the screen captured with the prompt, without the
+ * menu itself (its options are answered live, from the agent's current screen).
+ */
+export function promptOf(e: LedgerEntry): string {
+  const screen = e.text.replace(/^[^\n]*\n/, '').replace(/\n\nOptions: [\s\S]*$/, '')
+  const lines = screen.split('\n')
+  const first = (e.meta?.choices as string[] | null)?.[0]
+  if (first) {
+    const at = lines.findLastIndex((l) => l.includes(first))
+    if (at >= 0) lines.length = at
+  }
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop()
+  while (lines.length && !lines[0].trim()) lines.shift()
+  const indent = Math.min(...lines.filter((l) => l.trim()).map((l) => l.length - l.trimStart().length))
+  return lines.map((l) => l.slice(Number.isFinite(indent) ? indent : 0).trimEnd()).join('\n')
 }
 
 /** A page of chat: the last `limit` messages before `before`, plus everything shown between them. */

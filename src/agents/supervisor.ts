@@ -281,21 +281,23 @@ export class Supervisor extends EventEmitter {
   }
 
   /** Types a message into the agent, as its next instruction. */
-  async send(id: string, text: string): Promise<void> {
+  async send(id: string, text: string, by: 'captain' | 'owner' = 'captain'): Promise<void> {
     const a = this.find(id)
     const t = this.trackers.get(id)
     if (a.status !== 'running' || !t || t.live.mood === 'offline' || t.live.mood === 'error') throw new SupervisorError(`${id} is not running`, 409)
     if (!text.trim()) throw new SupervisorError('Message is empty')
     await this.tmux.sendText(Supervisor.session(id), text)
     markSent(t)
-    this.record(id, 'message', `${this.name} to ${id}: ${text.length > 600 ? `${text.slice(0, 597)}...` : text}`)
+    const who = by === 'owner' ? 'The owner' : this.name
+    this.record(id, 'message', `${who} to ${id}: ${text.length > 600 ? `${text.slice(0, 597)}...` : text}`, { by })
   }
 
   /**
    * Answers the menu on screen by option label. Reads the screen again first,
-   * so a stale label can never confirm a different option.
+   * so a stale label can never confirm a different option. `auto` answers are
+   * ones nobody had to decide (the trust prompt of Majordomo's own worktree).
    */
-  async answer(id: string, label: string, auto = false): Promise<void> {
+  async answer(id: string, label: string, by: 'captain' | 'owner' | 'auto' = 'captain'): Promise<void> {
     this.find(id)
     const session = Supervisor.session(id)
     const choices = readChoices(await this.tmux.capture(session, CAPTURE_LINES))
@@ -310,7 +312,8 @@ export class Supervisor extends EventEmitter {
       t.needsSent = null
       markSent(t)
     }
-    this.record(id, auto ? 'auto' : 'answer', auto ? `${this.name} accepted ${id}'s prompt: ${label}` : `${this.name} answered ${id}: ${label}`)
+    if (by === 'auto') this.record(id, 'auto', `${this.name} accepted ${id}'s prompt: ${label}`)
+    else this.record(id, 'answer', `${by === 'owner' ? 'The owner' : this.name} answered ${id}: ${label}`, { by })
   }
 
   async interrupt(id: string): Promise<void> {
@@ -444,7 +447,7 @@ export class Supervisor extends EventEmitter {
     const trust = t.live.reason === 'trust prompt' && a.repo ? t.live.choices?.find((c) => /\btrust\b|^yes\b/i.test(c.label) && !/^no\b/i.test(c.label)) : null
     if (trust) {
       try {
-        await this.answer(a.id, trust.label, true)
+        await this.answer(a.id, trust.label, 'auto')
         return
       } catch {
         // fall through and ask
@@ -494,6 +497,7 @@ export function composeBrief(a: Pick<AgentRow, 'id' | 'task_id' | 'cwd' | 'branc
     `You are "${a.id}", a worker agent. ${name}, the owner's assistant, gave you this job${task}:`,
     a.brief,
     where,
+    'Make reasonable calls yourself (tools, approach, details, a fallback when something is blocked) and mention them in your report. Stop to ask only for spending money, anything public or sent to other people, credentials or sudo, or deleting work you did not create.',
     `When you finish, or need a decision, end your turn with a short report: what you did, how you verified it, and what you need. ${name} reads only your final message of each turn.`,
   ].join('\n\n')
 }

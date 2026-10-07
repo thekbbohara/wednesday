@@ -24,6 +24,8 @@ at any time without losing anything. You give it the name you like
 - **Gamified skills**: Coding, Design, Research, ... level up from finished
   work; the assistant can unlock new skills as your work grows.
 - **OSINT skill** for due diligence and your own footprint (authorized use only).
+- **Design skill**: workers pick a named style for the project, write DESIGN.md
+  first, and check the result in a real browser before reporting.
 - Web UI (portrait, crew roster, command-center chat, skills, tasks, memory,
   settings) and a terminal chat. Docker-ready.
 
@@ -274,6 +276,22 @@ Then ask, e.g. "what's exposed about example.com", "due diligence on this
 vendor", or "build a dossier on <client I'm meeting>". Turn web access on in
 Settings so the worker can search.
 
+## Design
+
+Design work (UI, pages, dashboards, visual reports, guides) runs in a worker
+agent with the `skills/design` playbook. The worker picks a named style from a
+curated vocabulary of 24 (`skills/design/references/styles.md`) based on the
+project's need, customer and brand, writes it into the project's DESIGN.md
+before building (or follows the DESIGN.md that is already there), builds
+exactly to it, and screenshots the result at 375, 768, 1024 and 1440 wide in a
+real browser before it reports. No silent default style.
+
+Link it once so worker agents load it:
+
+```sh
+bash skills/design/scripts/install-design.sh
+```
+
 ## Captain fallback chain
 
 The captain starts on the selected engine (Claude by default). On a usage
@@ -512,6 +530,7 @@ src/agents/runtimes.ts   agent CLIs and runtimes.json
 src/migrate.ts           schema upgrades, run by hand
 src/skills/              skills config, EXP rules and levels
 skills/osint/            OSINT playbook: SKILL.md, scripts, references
+skills/design/           design playbook: style selection, DESIGN.md contract, browser check
 src/sleep/sleep.ts       nightly consolidation: prompt, validation, apply
 src/sleep/schedule.ts    daily schedule inside the server
 src/sleep.ts             run the sleep by hand (--dry-run)

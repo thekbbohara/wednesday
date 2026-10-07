@@ -2,7 +2,7 @@ export type ChatItem =
   | { type: "owner" | "captain"; id: number; ts: string; text: string }
   | { type: "receipt"; id: number; ts: string; verb: string; ref: string }
   | { type: "error"; id: number; ts: string; text: string }
-  | { type: "agent"; id: number; ts: string; agent: string; event: string; text: string }
+  | { type: "agent"; id: number; ts: string; agent: string; event: string; text: string; prompt?: string }
   | { type: "digest"; id: number; ts: string; text: string }
   | { type: "levelup"; id: number; ts: string; skill: string; level: number }
   | { type: "newskill"; id: number; ts: string; skill: string; name: string; color: string };
@@ -14,6 +14,8 @@ export interface Agent {
   state: "idle" | "working" | "needs" | "error" | "offline";
   reason: string | null;
   task: number | null;
+  /** The options of the menu on its screen, while it needs an answer. */
+  choices: string[] | null;
 }
 
 export interface Progress {
@@ -134,7 +136,10 @@ export interface AgentDetail {
     reason: string | null;
     attach: string;
     status: string;
+    choices: { label: string; selected: boolean }[] | null;
   };
+  /** What it is asking, while it needs an answer. */
+  prompt: string | null;
   task: { id: number; title: string; status: string } | null;
   lastReport: { id: number; ts: string; text: string } | null;
 }
@@ -168,6 +173,14 @@ export const api = {
       json<{ ok: true }>(r),
     ),
   ref: (ref: string) => fetch(`/api/ref/${encodeURIComponent(ref)}`).then((r) => json<RefInfo>(r)),
+  answer: (id: string, label: string) =>
+    fetch(`/api/agents/${encodeURIComponent(id)}/answer`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ label, by: "owner" }) }).then((r) =>
+      json<{ text: string }>(r),
+    ),
+  reply: (id: string, text: string) =>
+    fetch(`/api/agents/${encodeURIComponent(id)}/send`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, by: "owner" }) }).then((r) =>
+      json<{ text: string }>(r),
+    ),
   agent: (id: string) => fetch(`/api/agents/${encodeURIComponent(id)}`).then((r) => json<AgentDetail>(r)),
   skill: (id: string) => fetch(`/api/skills/${encodeURIComponent(id)}`).then((r) => json<SkillDetail>(r)),
   skills: () => fetch("/api/skills").then((r) => json<{ skills: (SkillView & { recent: ExpEvent[] })[]; rules: SkillDetail["rules"] }>(r)),

@@ -1,0 +1,77 @@
+{
+  "liveHead": "fab3e30888c6a5de20b645a9a0f2944a5a962ec4",
+  "files": {
+    "README.md": {
+      "sha256": "7f46e82608bfc847406d19ab7fe36ee0e98627837bfef708e158e8c411e9a8a2",
+      "mode": "0o644"
+    },
+    "prompts/captain.md": {
+      "sha256": "41d1f26bcfd54451243778a4701576a02500417f5035b6347877438ef50a2562",
+      "mode": "0o644"
+    },
+    "skills/design/SKILL.md": {
+      "sha256": "4f066022af2f2d6ce49050923cc3560543198babd68e7d7864b24780fc08c611",
+      "mode": "0o644"
+    },
+    "skills/design/references/styles.md": {
+      "sha256": "bd4ba1e4c03dd4381c41e4b07f246c5f294479b944d2d6fa90ac3cefe2624655",
+      "mode": "0o644"
+    },
+    "skills/design/scripts/install-design.sh": {
+      "sha256": "1dbfedc76871abfda03d4a521b127849d7ea2e457d77f98bf091c6471976d917",
+      "mode": "0o755"
+    },
+    "src/agents/supervisor.ts": {
+      "sha256": "3c7f60384ba335cb302549e6cabdb2049d79b947d527b292e7429fb4b266eb34",
+      "mode": "0o644"
+    },
+    "src/mcp/server.ts": {
+      "sha256": "481a9ea3ae5ac4e43a297ae8a68db47f9cccbba3c98f6f59e80f448b39e7a998",
+      "mode": "0o644"
+    },
+    "src/server.ts": {
+      "sha256": "33e3602ebd14aeb25652300fc3f67ea6117a74b6db734783c0f33ea9f5366c86",
+      "mode": "0o644"
+    },
+    "src/web/chat.ts": {
+      "sha256": "26cb9f4d01acda209820a289aeb130b655c06a1e21a6f46451a04ecb25d88443",
+      "mode": "0o644"
+    },
+    "test/chat.test.ts": {
+      "sha256": "2b2d7d19411f6c2caad07e1dec79fa20c3898e618b101cce1d39b4bdadb69007",
+      "mode": "0o644"
+    },
+    "test/design.test.ts": {
+      "sha256": "42f2b13a20eaf1b5c17647ede7f773ad362cc75da09562d76abd604d806c0783",
+      "mode": "0o644"
+    },
+    "test/mcp.test.ts": {
+      "sha256": "82cfce8d18c66cd1d055d6ae25ab5443a845ebfcd2fecabe0202e38336589c20",
+      "mode": "0o644"
+    },
+    "test/supervisor.test.ts": {
+      "sha256": "4f4ffd93152df21edcea207d43d2e139989ec4f7aed0a49ebb0dcfc2b20dfffd",
+      "mode": "0o644"
+    },
+    "web/App.tsx": {
+      "sha256": "f39f7f3e6aa7c06681ec510fc3857131b922c4b3e663ba8fc1d4567459f03eb6",
+      "mode": "0o644"
+    },
+    "web/Reply.tsx": {
+      "sha256": "0ba853a03782ebff127d8d62f28accab4c8f1e781c4d5d79936e011c252e4d91",
+      "mode": "0o644"
+    },
+    "web/api.ts": {
+      "sha256": "27df88871b8885d543bcad38807f2c2fca356fa402e46404b49c199663913048",
+      "mode": "0o644"
+    },
+    "web/pages.tsx": {
+      "sha256": "e3fe1bc56c3495b245db724cc5b98dcc1a0332a311cca49117a94f2710d5f2ef",
+      "mode": "0o644"
+    },
+    "web/styles.css": {
+      "sha256": "e243a69b8177556eb562ab968b864fec9014f70007e351784fe1803e9cd34886",
+      "mode": "0o644"
+    }
+  }
+}

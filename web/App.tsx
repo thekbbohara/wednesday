@@ -5,6 +5,7 @@ import { api, mergeItems, RUNTIME_COLOR, type Agent, type AgentDetail, type Chat
 import { ExpBar, SkillBody, SkillIcon } from "./Skills";
 import { Cited } from "./Cited";
 import { Nav, usePage } from "./Nav";
+import { Reply } from "./Reply";
 import { MemoryPage, PageHead, SettingsPage, SkillsPage, TasksPage } from "./pages";
 import { Face, type Mood } from "./Face";
 import { buildRows, fullTime, splitCitations, type Row } from "./thread";
@@ -175,6 +176,14 @@ export function App() {
 
   const colors = useMemo(() => new Map(status.agents.map((a) => [a.id, RUNTIME_COLOR[a.runtime] ?? OTHER_COLOR])), [status.agents]);
 
+  const liveAgents = useMemo(() => new Map(status.agents.map((a) => [a.id, a])), [status.agents]);
+  // The newest "needs" row of each agent that is still waiting gets the answer card.
+  const asking = useMemo(() => {
+    const newest = new Map<string, number>();
+    for (const i of items) if (i.type === "agent" && i.event === "needs") newest.set(i.agent, i.id);
+    return new Set([...newest].filter(([agent]) => liveAgents.get(agent)?.state === "needs").map(([, id]) => id));
+  }, [items, liveAgents]);
+
   const closePopover = useCallback(() => setPopover(null), []);
 
   const send = async (text: string) => {
@@ -209,7 +218,17 @@ export function App() {
                 {hasMore && <div className="thread__more">Loading earlier messages</div>}
                 {loaded && !items.length && <Empty name={status.name} />}
                 {rows.map((row) => (
-                  <RowView key={row.key} row={row} onRef={openRef} colors={colors} skills={skillMap} onSkills={() => goPage("skills")} majordomoName={status.name} />
+                  <RowView
+                    key={row.key}
+                    row={row}
+                    onRef={openRef}
+                    colors={colors}
+                    skills={skillMap}
+                    onSkills={() => goPage("skills")}
+                    majordomoName={status.name}
+                    asking={asking}
+                    agents={liveAgents}
+                  />
                 ))}
                 {status.thinking && <Pending receipts={trailing} onRef={openRef} name={status.name} />}
                 {!status.thinking && trailing.length > 0 && <Receipts receipts={trailing} onRef={openRef} />}
@@ -235,7 +254,7 @@ export function App() {
           )}
           {page === "tasks" && (
             <div className="page__view">
-              <TasksPage version={version} skills={skillMap} onRef={openRef} />
+              <TasksPage version={version} skills={skillMap} onRef={openRef} name={status.name} />
             </div>
           )}
           {page === "memory" && (
@@ -446,6 +465,8 @@ function RowView({
   skills,
   onSkills,
   majordomoName,
+  asking,
+  agents,
 }: {
   row: Row;
   onRef: OnRef;
@@ -453,6 +474,8 @@ function RowView({
   skills: Map<string, SkillView>;
   onSkills: () => void;
   majordomoName: string;
+  asking: Set<number>;
+  agents: Map<string, Agent>;
 }) {
   switch (row.kind) {
     case "day":
@@ -541,7 +564,7 @@ function RowView({
       const { item } = row;
       const tone = item.event === "needs" ? " agent-row--needs" : item.event === "error" ? " agent-row--error" : "";
       const mood: Mood = item.event === "needs" ? "needs" : item.event === "error" ? "error" : item.event === "exit" || item.event === "stop" ? "offline" : "idle";
-      return (
+      const line = (
         <div className={`agent-row${tone}`} title={fullTime(item.ts)}>
           <Face id={item.agent} mood={mood} color={colors.get(item.agent) ?? OTHER_COLOR} size={20} badge={false} />
           <span className="agent-row__text">
@@ -551,6 +574,15 @@ function RowView({
             L{item.id}
           </button>
         </div>
+      );
+      if (!asking.has(item.id)) return line;
+      return (
+        <>
+          {line}
+          <div className="answer-card">
+            <AnswerBody id={item.agent} prompt={item.prompt ?? null} choices={agents.get(item.agent)?.choices ?? null} />
+          </div>
+        </>
       );
     }
   }
@@ -847,6 +879,15 @@ function AgentBody({ id, onRef }: { id: string; onRef: OnRef }) {
           </>
         )}
       </dl>
+      {a.mood === "needs" ? (
+        <div className="agent-pop__answer">
+          <AnswerBody id={a.id} prompt={d.prompt} choices={a.choices?.map((c) => c.label) ?? null} />
+        </div>
+      ) : a.status === "running" && a.mood !== "error" && a.mood !== "offline" ? (
+        <div className="agent-pop__answer">
+          <Reply placeholder={`Message ${a.id}`} onSend={(t) => api.reply(a.id, t)} />
+        </div>
+      ) : null}
       {d.lastReport ? (
         <div className="agent-pop__report">
           <p className="micro">Last report · {fullTime(d.lastReport.ts)}</p>
@@ -858,6 +899,55 @@ function AgentBody({ id, onRef }: { id: string; onRef: OnRef }) {
       <button className="ghost" onClick={copy}>
         {copied ? "Copied" : "Copy attach command"}
       </button>
+    </div>
+  );
+}
+
+/**
+ * Answers an agent's prompt from the web: its question, one button per option
+ * of the menu on its screen, or a reply box when the prompt has no menu.
+ */
+function AnswerBody({ id, prompt, choices }: { id: string; prompt: string | null; choices: string[] | null }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState("");
+  const pre = useRef<HTMLPreElement>(null);
+
+  // Commands run long; the question is at the bottom.
+  useLayoutEffect(() => {
+    if (pre.current) pre.current.scrollTop = pre.current.scrollHeight;
+  }, [prompt]);
+
+  const pick = async (label: string) => {
+    setBusy(label);
+    setErr("");
+    try {
+      await api.answer(id, label);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="answer">
+      {prompt && (
+        <pre className="answer__prompt" ref={pre} tabIndex={0} aria-label={`What ${id} is asking`}>
+          {prompt}
+        </pre>
+      )}
+      {choices?.length ? (
+        <div className="answer__choices" role="group" aria-label={`Answer ${id}`}>
+          {choices.map((c) => (
+            <button key={c} className="answer__choice" title={c} disabled={busy !== null} onClick={() => void pick(c)}>
+              <span>{busy === c ? "Sending" : c}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <Reply placeholder={`Answer ${id}`} onSend={(t) => api.reply(id, t)} />
+      )}
+      {err && <p className="answer__err">{err}</p>}
     </div>
   );
 }

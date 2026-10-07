@@ -2042,3 +2042,158 @@ button.chip:hover {
 .composer__engine { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 8px; color: var(--muted); font-size: 12px; }
 .composer__engine select { border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--ink); padding: 5px 12px; font: inherit; }
 .composer__engine select:focus-visible { outline: 2px solid var(--blue-deep); outline-offset: 2px; }
+
+/* ---------- answering an agent ---------- */
+
+/* Under its "needs an answer" row, lined up with the row's text (face 20 + gap 8). */
+.answer-card {
+  margin: 8px 0 0 32px;
+  max-width: 560px;
+  padding: 10px;
+  background: var(--panel);
+  border-radius: 14px;
+  box-shadow: inset 0 0 0 1px #f5dfb6, var(--shadow);
+  animation: rise 0.2s var(--ease);
+}
+
+.agent-pop__answer {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.answer {
+  display: grid;
+  gap: 8px;
+}
+
+.answer__prompt {
+  margin: 0;
+  padding: 8px 10px;
+  max-height: calc(8 * 1.6em + 16px);
+  overflow: auto;
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--ink);
+  font: 12px/1.6 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.answer__prompt:focus-visible {
+  outline: 2px solid var(--blue-deep);
+  outline-offset: 1px;
+}
+
+.answer__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.answer__choice {
+  max-width: 100%;
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--panel-2);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: left;
+  transition: background 0.2s var(--ease), opacity 0.2s var(--ease);
+}
+
+/* Long options ("don't ask again for commands that start with ...") stay two lines; the full text is the tooltip. */
+.answer__choice span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.answer__choice:hover:not(:disabled) {
+  background: #e9edf4;
+}
+
+.answer__choice:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.answer__choice:focus-visible,
+.reply__send:focus-visible {
+  outline: 2px solid var(--blue-deep);
+  outline-offset: 2px;
+}
+
+.answer__err {
+  margin: 0;
+  font-size: 12px;
+  color: #c43c3c;
+  overflow-wrap: anywhere;
+}
+
+.reply {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 3px 3px 12px;
+  background: var(--panel-2);
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1px var(--line);
+  transition: box-shadow 0.2s var(--ease);
+}
+
+.reply:focus-within {
+  background: var(--panel);
+  box-shadow: 0 0 0 2px var(--blue-deep);
+}
+
+.reply__input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  border: 0;
+  outline: 0;
+  background: none;
+  font-size: 13px;
+}
+
+.reply__input::placeholder {
+  color: var(--faint);
+}
+
+.reply__send {
+  flex: none;
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--blue-deep);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.2s var(--ease);
+}
+
+.reply__send:disabled {
+  background: var(--sleep);
+  cursor: default;
+}
+
+.row__reply {
+  display: grid;
+  gap: 6px;
+  max-width: 560px;
+}
+
+.reply__sent {
+  margin: 0;
+  font-size: 12px;
+  color: #2fae84;
+}

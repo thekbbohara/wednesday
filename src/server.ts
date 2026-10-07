@@ -12,7 +12,7 @@ import { Captain } from './captain/captain.ts'
 import type { Runner } from './captain/runner.ts'
 import { buildRunner } from './captain/chain.ts'
 import type { Provider } from './captain/provider.ts'
-import { chatPage, describeRef, toChatItem, type ChatItem } from './web/chat.ts'
+import { chatPage, describeRef, promptOf, toChatItem, type ChatItem } from './web/chat.ts'
 import { Supervisor, SupervisorError, type AgentView } from './agents/supervisor.ts'
 import type { LedgerEntry } from './memory/store.ts'
 import { ClaudeSleepModel } from './sleep/sleep.ts'
@@ -29,6 +29,8 @@ export interface Agent {
   state: 'idle' | 'working' | 'needs' | 'error' | 'offline'
   reason: string | null
   task: number | null
+  /** The options of the menu on its screen, while it needs an answer. */
+  choices: string[] | null
 }
 
 export interface SkillView extends Skill, Progress {}
@@ -88,7 +90,7 @@ export function createApp(opts: {
   const listeners = new Set<Listener>()
   let cursor = mem.lastLedgerId()
   let lastStatus = ''
-  const toAgent = (a: AgentView): Agent => ({ id: a.id, name: a.id, runtime: a.runtime, state: a.mood, reason: a.reason, task: a.task_id })
+  const toAgent = (a: AgentView): Agent => ({ id: a.id, name: a.id, runtime: a.runtime, state: a.mood, reason: a.reason, task: a.task_id, choices: a.mood === 'needs' ? (a.choices?.map((x) => x.label) ?? null) : null })
   const lastReply = () => {
     const [last] = mem.ledgerTail(1, ['captain'])
     return last?.ts ?? null
@@ -284,7 +286,8 @@ export function createApp(opts: {
       const a = needSup().get(param(c))
       const report = mem.agentLastEvent(a.id, 'report')
       const task = a.task_id ? mem.taskGet(a.task_id) : null
-      return { agent: a, task: task ? { id: task.id, title: task.title, status: task.status } : null, lastReport: report ? { id: report.id, ts: report.ts, text: report.text.replace(/^\S+ reported:\n/, '') } : null }
+      const asked = a.mood === 'needs' ? mem.agentLastEvent(a.id, 'needs') : null
+      return { agent: a, prompt: asked ? promptOf(asked) : null, task: task ? { id: task.id, title: task.title, status: task.status } : null, lastReport: report ? { id: report.id, ts: report.ts, text: report.text.replace(/^\S+ reported:\n/, '') } : null }
     }),
   )
 
@@ -321,7 +324,8 @@ export function createApp(opts: {
   app.post(
     '/api/agents/:id/send',
     agentRoute(async (c) => {
-      await needSup().send(param(c), String((await body(c)).text ?? ''))
+      const b = await body(c)
+      await needSup().send(param(c), String(b.text ?? ''), b.by === 'owner' ? 'owner' : 'captain')
       return { text: 'Sent.' }
     }),
   )
@@ -329,8 +333,9 @@ export function createApp(opts: {
   app.post(
     '/api/agents/:id/answer',
     agentRoute(async (c) => {
-      const label = String((await body(c)).label ?? '')
-      await needSup().answer(param(c), label)
+      const b = await body(c)
+      const label = String(b.label ?? '')
+      await needSup().answer(param(c), label, b.by === 'owner' ? 'owner' : 'captain')
       return { text: `Answered: ${label}` }
     }),
   )
