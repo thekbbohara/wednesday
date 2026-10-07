@@ -119,11 +119,14 @@ export class Captain {
         command: process.execPath,
         args: ['--disable-warning=ExperimentalWarning', MCP_SERVER],
         env: {
+          WEDNESDAY_DB: this.cfg.dbPath,
           MAJORDOMO_DB: this.cfg.dbPath,
+          WEDNESDAY_SESSION: sessionId,
           MAJORDOMO_SESSION: sessionId,
+          WEDNESDAY_DATA_DIR: this.cfg.dataDir,
           MAJORDOMO_DATA_DIR: this.cfg.dataDir,
-          ...(this.agents ? { MAJORDOMO_URL: this.agents.url } : {}),
-          ...(this.agents?.token ? { MAJORDOMO_TOKEN: this.agents.token } : {}),
+          ...(this.agents ? { WEDNESDAY_URL: this.agents.url, MAJORDOMO_URL: this.agents.url } : {}),
+          ...(this.agents?.token ? { WEDNESDAY_TOKEN: this.agents.token, MAJORDOMO_TOKEN: this.agents.token } : {}),
         } as Record<string, string>,
       },
     }

@@ -33,16 +33,16 @@ describe('settings file', () => {
 })
 
 describe('assistant name', () => {
-  it('comes from ASSISTANT_NAME, defaulting to Majordomo', async () => {
+  it('comes from ASSISTANT_NAME, defaulting to Wednesday', async () => {
     const { loadConfig } = await import('../src/config.ts')
     const prev = process.env.ASSISTANT_NAME
     try {
       delete process.env.ASSISTANT_NAME
-      expect(loadConfig().name).toBe('Majordomo')
+      expect(loadConfig().name).toBe('Wednesday')
       process.env.ASSISTANT_NAME = 'Friday'
       expect(loadConfig().name).toBe('Friday')
       process.env.ASSISTANT_NAME = '   '
-      expect(loadConfig().name).toBe('Majordomo')
+      expect(loadConfig().name).toBe('Wednesday')
     } finally {
       if (prev === undefined) delete process.env.ASSISTANT_NAME
       else process.env.ASSISTANT_NAME = prev

@@ -1,6 +1,6 @@
 // The captain's configured provider chain: default Claude login, then fallbacks
 // tried in order when one hits its usage limit.
-//   MAJORDOMO_FALLBACKS=claude:~/.claude-2,claude:~/.claude-3,codex
+//   WEDNESDAY_FALLBACKS=claude:~/.claude-2,claude:~/.claude-3,codex
 // A `claude:<dir>` entry is another Claude account (its own CLAUDE_CONFIG_DIR);
 // `codex[:model]` and `kimi[:model]` select their respective CLIs.
 import { homedir } from 'node:os'
@@ -34,13 +34,13 @@ export function parseChain(fallbacks: string | undefined, primaryConfigDir?: str
     const [kind, ...rest] = raw.split(':')
     const arg = rest.join(':').trim()
     if (kind === 'claude') {
-      if (!arg) throw new Error(`MAJORDOMO_FALLBACKS: "${raw}" needs a config dir, e.g. claude:~/.claude-2`)
+      if (!arg) throw new Error(`WEDNESDAY_FALLBACKS: "${raw}" needs a config dir, e.g. claude:~/.claude-2`)
       const dir = expand(arg)
       chain.push({ id: `claude@${basename(dir)}`, kind: 'claude', label: `Claude (${basename(dir).replace(/^\./, '')})`, configDir: dir })
     } else if (kind === 'codex' || kind === 'kimi' || kind === 'agy') {
       chain.push({ id: arg ? `${kind}:${arg}` : kind, kind, label: arg ? `${kind} (${arg})` : kind, ...(arg ? { model: arg } : {}) })
     } else {
-      throw new Error(`MAJORDOMO_FALLBACKS: unknown entry "${raw}" (use claude:<config dir> or codex[:model], kimi[:model], agy[:model])`)
+      throw new Error(`WEDNESDAY_FALLBACKS: unknown entry "${raw}" (use claude:<config dir> or codex[:model], kimi[:model], agy[:model])`)
     }
   }
   return dedupe(chain)

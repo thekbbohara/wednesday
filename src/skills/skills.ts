@@ -1,4 +1,4 @@
-// Majordomo's skills. Defaults below; override or extend in <data>/skills.json:
+// Wednesday's skills. Defaults below; override or extend in <data>/skills.json:
 //   [{ "id": "music", "name": "Music", "color": "#f78fb3" }]
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'

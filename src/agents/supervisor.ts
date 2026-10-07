@@ -87,7 +87,7 @@ export interface SupervisorOptions {
   name?: string
   dataDir: string
   socket: string
-  /** Where agents' turn hooks reach Majordomo. */
+  /** Where agents' turn hooks reach Wednesday. */
   hook: { url: string; token?: string } | null
   pollMs?: number
   timings?: Partial<typeof DEFAULT_TIMINGS>
@@ -105,13 +105,13 @@ export function launchSpec(
   runtime: Runtime,
   opts: { hook: SupervisorOptions['hook']; hookScript: string; claudeConfigDir: string },
 ): { command: string; env: Record<string, string> } {
-  const env: Record<string, string> = { MAJORDOMO_AGENT: id }
+  const env: Record<string, string> = { WEDNESDAY_AGENT: id, MAJORDOMO_AGENT: id }
   let command = runtime.command
   if (runtime.turnHook === 'claude') command += claudeSettingsArg(opts.hook ? opts.hookScript : null)
   else if (runtime.turnHook && opts.hook) command += turnHookArgs(runtime.turnHook, opts.hookScript)
   if (opts.hook && runtime.turnHook) {
-    env.MAJORDOMO_URL = opts.hook.url
-    if (opts.hook.token) env.MAJORDOMO_TOKEN = opts.hook.token
+    env.WEDNESDAY_URL = env.MAJORDOMO_URL = opts.hook.url
+    if (opts.hook.token) env.WEDNESDAY_TOKEN = env.MAJORDOMO_TOKEN = opts.hook.token
   }
   if (opts.claudeConfigDir) env.CLAUDE_CONFIG_DIR = opts.claudeConfigDir
   else command = `unset CLAUDE_CONFIG_DIR; ${command}`
@@ -136,7 +136,7 @@ export class Supervisor extends EventEmitter {
   constructor(opts: SupervisorOptions) {
     super()
     this.mem = opts.mem
-    this.name = opts.name ?? 'Majordomo'
+    this.name = opts.name ?? 'Wednesday'
     this.dataDir = opts.dataDir
     this.hook = opts.hook
     this.tmux = new Tmux(opts.socket)
@@ -295,7 +295,7 @@ export class Supervisor extends EventEmitter {
   /**
    * Answers the menu on screen by option label. Reads the screen again first,
    * so a stale label can never confirm a different option. `auto` answers are
-   * ones nobody had to decide (the trust prompt of Majordomo's own worktree).
+   * ones nobody had to decide (the trust prompt of Wednesday's own worktree).
    */
   async answer(id: string, label: string, by: 'captain' | 'owner' | 'auto' = 'captain'): Promise<void> {
     this.find(id)
@@ -377,7 +377,7 @@ export class Supervisor extends EventEmitter {
   private async sample(a: AgentRow, pane: PaneInfo | undefined, now: number): Promise<void> {
     let t = this.trackers.get(a.id)
     if (!t) {
-      // Majordomo restarted while the agent kept running: pick it up as it is.
+      // Wednesday restarted while the agent kept running: pick it up as it is.
       t = {
         print: null,
         changedAt: 0,
@@ -424,7 +424,7 @@ export class Supervisor extends EventEmitter {
     }
     await this.deliverBrief(a, t, now)
 
-    // No turn hook (the runtime has none, or Majordomo has no URL for it): a turn ends when the agent has gone quiet.
+    // No turn hook (the runtime has none, or Wednesday has no URL for it): a turn ends when the agent has gone quiet.
     const runtime = this.runtimes.find((r) => r.id === a.runtime)
     if (!(runtime?.turnHook && this.hook) && !t.brief) {
       if (verdict.mood === 'working') t.busy = true
@@ -443,7 +443,7 @@ export class Supervisor extends EventEmitter {
     }
     if (t.needsSent === key || now - t.needsSince < this.timings.needsStableMs) return
     t.needsSent = key
-    // The folder-trust prompt for a worktree Majordomo made itself is not a decision for anyone.
+    // The folder-trust prompt for a worktree Wednesday made itself is not a decision for anyone.
     const trust = t.live.reason === 'trust prompt' && a.repo ? t.live.choices?.find((c) => /\btrust\b|^yes\b/i.test(c.label) && !/^no\b/i.test(c.label)) : null
     if (trust) {
       try {
@@ -488,7 +488,7 @@ function markSent(t: Tracker): void {
 }
 
 /** The first message a worker gets. */
-export function composeBrief(a: Pick<AgentRow, 'id' | 'task_id' | 'cwd' | 'branch' | 'brief'>, taskTitle: string | null, name = 'Majordomo'): string {
+export function composeBrief(a: Pick<AgentRow, 'id' | 'task_id' | 'cwd' | 'branch' | 'brief'>, taskTitle: string | null, name = 'Wednesday'): string {
   const task = a.task_id ? ` (task T${a.task_id}${taskTitle ? `: ${taskTitle}` : ''})` : ''
   const where = a.branch
     ? `You are in a fresh git worktree made for this job, on branch ${a.branch}. Commit your work there. Do not push, merge or open a PR unless the job says so.`

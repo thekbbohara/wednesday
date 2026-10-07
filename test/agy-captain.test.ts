@@ -1,3 +1,5 @@
+import { serve } from '@hono/node-server'
+import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -45,15 +47,15 @@ function memory() {
 }
 
 describe('agy captain selection', () => {
-  it('uses Opus for captain defaults, Gemini for workers, and preserves explicit overrides', () => {
-    expect(parseEngineCommand('/engine agy')).toEqual({ engine: 'agy', engineModel: AGY_CAPTAIN_MODEL })
+  it('requires explicit captain models, Gemini for workers, and preserves explicit overrides', () => {
+    expect(parseEngineCommand('/engine agy')).toEqual({ engine: 'agy', engineModel: '' })
     expect(parseEngineCommand('/engine agy gemini-3.1-pro-high')?.engineModel).toBe('gemini-3.1-pro-high')
     const cfg = loadConfig({ engine: 'codex', engineModel: 'gpt-5' })
     apply(cfg, { engine: 'agy' })
-    expect(cfg.engineModel).toBe(AGY_CAPTAIN_MODEL)
+    expect(cfg.engineModel).toBe('')
     expect(check({ engine: ['agy'] as any })).toHaveProperty('engine')
     expect(check({ engine: 'agy', engineModel: 7 as any })).toHaveProperty('engineModel')
-    expect(selectedChain(parseChain('agy,codex'), 'agy')[0]).toMatchObject({ kind: 'agy', id: `agy:${AGY_CAPTAIN_MODEL}`, model: AGY_CAPTAIN_MODEL })
+    expect(selectedChain(parseChain('agy,codex'), 'agy')[0]).toMatchObject({ kind: 'agy', id: 'agy' })
     expect(buildRunner(selectedChain(parseChain(''), 'agy')[0], cfg)).toBeInstanceOf(AgyRunner)
     expect(loadRuntimes('/nonexistent').find(r => r.id === 'agy')?.command).toBe(AGY_WORKER_COMMAND)
     const dataDir = mkdtempSync(join(tmpdir(), 'agy-override-'))
@@ -83,7 +85,7 @@ describe('agy captain selection', () => {
       await until(() => !!finish)
       await post('/api/messages', { text: '/engine agy' })
       expect(calls).toHaveLength(1)
-      expect(cfg.engineModel).toBe(AGY_CAPTAIN_MODEL)
+      expect(cfg.engineModel).toBe('')
       await post('/api/messages', { text: 'second turn' })
       finish!(success)
       await until(() => calls.length === 2 && !captain.busy)
@@ -94,9 +96,48 @@ describe('agy captain selection', () => {
       expect((await post('/api/captain/engine', { engine: 'agy', model: 'claude-sonnet-4-6' })).status).toBe(200)
       expect(cfg.engineModel).toBe('claude-sonnet-4-6')
       expect((await post('/api/settings', { engineModel: '' }, 'PUT')).status).toBe(200)
-      expect(cfg.engineModel).toBe(AGY_CAPTAIN_MODEL)
+      expect(cfg.engineModel).toBe('')
       expect(calls).toHaveLength(2)
     } finally { close(); rmSync(dataDir, { recursive: true, force: true }) }
+  })
+
+  it('starts isolated HTTP and routes MCP tools, cookies and captain prompts without SQLite or inference', async () => {
+    const { mem } = memory()
+    const dataDir = mkdtempSync(join(tmpdir(), 'wednesday-http-'))
+    const cfg = loadConfig({ dataDir, engine: 'codex' })
+    const calls: TurnRequest[] = []
+    const { app, captain, close } = createApp({ mem, cfg, token: 'isolated-token', webRoot: resolve('dist'), runnerFor: () => ({ run: async req => { calls.push(req); return success } }) })
+    const http = serve({ fetch: app.fetch, hostname: '127.0.0.1', port: 0 })
+    await new Promise<void>(r => { if (http.listening) r(); else http.once('listening', r) })
+    const address = http.address() as { port: number }
+    const url = `http://127.0.0.1:${address.port}`
+    const mcp = buildServer(mem, null, { url, token: 'isolated-token' })
+    const client = new Client({ name: 'wednesday-smoke', version: '1' })
+    const [a, b] = InMemoryTransport.createLinkedPair()
+    try {
+      expect((await fetch(url + '/api/healthz')).status).toBe(401)
+      const page = await fetch(url + '/?token=isolated-token')
+      expect(page.headers.get('set-cookie')).toContain('wednesday_token=')
+      expect(await page.text()).toContain('<title>Wednesday</title>')
+      for (const cookie of ['wednesday_token', 'majordomo_token']) {
+        const res = await fetch(url + '/api/healthz', { headers: { cookie: `${cookie}=isolated-token` } })
+        expect(res.status).toBe(200)
+        expect(await res.json()).toEqual({ ok: true })
+        expect(cfg.name).toBe('Wednesday')
+      }
+      await mcp.connect(a); await client.connect(b)
+      expect((await client.callTool({ name: 'captain_engine_set', arguments: { engine: 'codex' } })).isError).not.toBe(true)
+      expect(cfg.engine).toBe('codex')
+      await fetch(url + '/api/messages', { method: 'POST', headers: { authorization: 'Bearer isolated-token', 'content-type': 'application/json' }, body: JSON.stringify({ text: 'runtime smoke' }) })
+      for (let i = 0; i < 200 && (!calls.length || captain.busy); i++) await new Promise(r => setTimeout(r, 5))
+      expect(calls).toHaveLength(1)
+      expect(calls[0].systemPrompt).toContain('Wednesday')
+      expect(calls[0].mcpServers.majordomo.env).toMatchObject({ WEDNESDAY_DB: cfg.dbPath, MAJORDOMO_DB: cfg.dbPath })
+    } finally {
+      await client.close(); await mcp.close(); close()
+      await new Promise<void>((r, reject) => http.close(e => e ? reject(e) : r()))
+      rmSync(dataDir, { recursive: true, force: true })
+    }
   })
 
   it('exposes agy in the MCP schema and forwards the engine switch without a database', async () => {
@@ -128,7 +169,7 @@ console.log(JSON.stringify({status:'SUCCESS',conversation_id:'12345678-1234-1234
 `, { mode: 0o700 })
     const req: TurnRequest = { sessionId: 'session-one', resume: false, message: 'owner message', systemPrompt: 'captain instructions', mcpServers: { majordomo: { command: 'node', args: ['mcp.ts'], env: { MAJORDOMO_DB: '/existing/db' } } } }
     try {
-      const runner = new AgyRunner({ bin: fake, dataDir, timeoutSec: 5 })
+      const runner = new AgyRunner({ bin: fake, dataDir, timeoutSec: 5, model: AGY_CAPTAIN_MODEL })
       const first = await runner.run(req)
       expect(first).toMatchObject({ text: 'captain reply', isError: false, contextWindow: null, contextTokens: 0 })
       const cwd = join(dataDir, 'agy-captain', req.sessionId)
@@ -149,8 +190,16 @@ console.log(JSON.stringify({status:'SUCCESS',conversation_id:'12345678-1234-1234
     } finally { rmSync(dataDir, { recursive: true, force: true }) }
   })
 
+  it('does not launch an implicit unverified model', async () => {
+    const runner = new AgyRunner({ bin: '/must-not-launch', dataDir: '/must-not-write', timeoutSec: 1 })
+    const result = await runner.run({ sessionId: 'blocked', resume: false, message: 'hello', systemPrompt: '', mcpServers: {} })
+    expect(result.isError).toBe(true)
+    expect(result.text).toContain('explicitly verified agy model')
+  })
+
   it('sanitizes failures and keeps aggregate token use separate from context size', () => {
     expect(parseAgyResult('invalid')).toBeNull()
+    expect(parseAgyResult(JSON.stringify({ status: 'ERROR', response: 'model unavailable secret-token' }))?.result.text).toContain('model is unavailable or inaccessible')
     expect(parseAgyResult(JSON.stringify({ status: 'SUCCESS', response: 'hello', conversation_id: 'id', usage: { total_tokens: 50000 } }))?.result).toMatchObject({ contextTokens: 0, contextWindow: null, text: 'hello' })
     expect(parseAgyResult(JSON.stringify({ status: 'ERROR', response: 'quota exceeded secret-token' }))?.result.text).toBe('Antigravity usage limit reached.')
     expect(parseAgyResult(JSON.stringify({ status: 'ERROR', response: 'secret-token' }))?.result.text).not.toContain('secret-token')

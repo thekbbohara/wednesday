@@ -1,7 +1,7 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning
 // Terminal chat with the captain.
-//   majordomo                 interactive chat
-//   majordomo ask "message"   one turn, print the reply
+//   wednesday                 interactive chat
+//   wednesday ask "message"   one turn, print the reply
 import { createInterface } from 'node:readline/promises'
 import { stdin, stdout } from 'node:process'
 import { mkdirSync } from 'node:fs'
@@ -89,7 +89,7 @@ async function command(line: string): Promise<boolean> {
 if (process.argv[2] === 'ask') {
   const text = process.argv.slice(3).join(' ').trim()
   if (!text) {
-    console.error('usage: majordomo ask "message"')
+    console.error('usage: wednesday ask "message"')
     process.exit(2)
   }
   if (/^\/engine(?:\s|$)/.test(text)) { await command(text); mem.close(); process.exit(0) }

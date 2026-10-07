@@ -25,7 +25,7 @@ export function progress(exp: number, scale = 1): Progress {
   return { level, exp, floor: expForLevel(level) * scale, next: expForLevel(level + 1) * scale }
 }
 
-/** Majordomo's own level grows on all EXP, at a slower pace. */
+/** Wednesday's own level grows on all EXP, at a slower pace. */
 export const OVERALL_SCALE = 3
 
 /** What earns EXP, per task, for the task's skill. */

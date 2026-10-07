@@ -111,7 +111,7 @@ describe('supervisor', () => {
     expect(existsSync(join(a.cwd, 'README.md'))).toBe(true)
     const auto = await until(() => events.find((e) => e.entry.meta?.event === 'auto'))
     expect(auto).toMatchObject({ wake: false })
-    expect(auto.entry.text).toBe("Majordomo accepted fixer's prompt: Yes, I trust this folder")
+    expect(auto.entry.text).toBe("Wednesday accepted fixer's prompt: Yes, I trust this folder")
     expect(events.some((e) => e.entry.meta?.event === 'needs')).toBe(false)
 
     // Removing keeps the branch, and refuses while there are uncommitted changes.

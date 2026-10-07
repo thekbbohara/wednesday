@@ -22,7 +22,7 @@ export function App() {
   const [items, setItems] = useState<ChatItem[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [status, setStatus] = useState<Status>({
-    engine: "claude", name: "Majordomo", thinking: false, agents: [], model: "", lastReplyAt: null, majordomo: { level: 1, exp: 0, floor: 0, next: 300 }, skills: [], waiting: 0 });
+    engine: "claude", name: "Wednesday", thinking: false, agents: [], model: "", lastReplyAt: null, majordomo: { level: 1, exp: 0, floor: 0, next: 300 }, skills: [], waiting: 0 });
   const [page, goPage] = usePage();
   // Bumps on every ledger change, so open pages refresh themselves.
   const [version, setVersion] = useState(0);
@@ -301,7 +301,7 @@ type PopoverTarget =
 
 const OTHER_COLOR = "#8fb3c9";
 
-/** Majordomo's portrait: face, level and EXP, state. */
+/** Wednesday's portrait: face, level and EXP, state. */
 function Portrait({ mood, stateText, status }: { mood: Mood; stateText: string; status: Status }) {
   const narrow = useNarrow();
   const now = useNow(30_000);

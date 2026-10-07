@@ -51,7 +51,7 @@ describe('captain', () => {
 
   it('primes a fresh session with Now, open tasks, conversation tail and recall; resumed turns stay lean', async () => {
     const { mem, runner, captain } = setup()
-    mem.nowUpdate('Goal: build Majordomo step 1. Why: one chat forever.')
+    mem.nowUpdate('Goal: build Wednesday step 1. Why: one chat forever.')
     mem.taskCreate({ title: 'Memory service', goal: 'durable memory' })
     mem.factWrite({ kind: 'decision', subject: 'memory backend', body: 'SQLite FTS5', source: 'owner' })
     await captain.handle('what memory backend did we choose?')

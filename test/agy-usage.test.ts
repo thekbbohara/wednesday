@@ -22,7 +22,7 @@ describe('Antigravity runtime and quotas', () => {
     expect(classify({ human: false, dead: false, exitCode: null, command: 'agy', screen, sinceChange: Infinity })).toEqual({ mood: 'needs', reason: 'trust prompt' })
     expect(readChoices(screen)).toEqual([{ label: 'Yes, I trust this folder', selected: true }, { label: 'No, exit', selected: false }])
     const runtime = loadRuntimes('/nonexistent').find(r => r.id === 'agy')!
-    expect(launchSpec('agyworker', runtime, { hook: null, hookScript: '', claudeConfigDir: '' })).toEqual({ command: 'unset CLAUDE_CONFIG_DIR; agy --model gemini-3.8-flash-medium', env: { MAJORDOMO_AGENT: 'agyworker' } })
+    expect(launchSpec('agyworker', runtime, { hook: null, hookScript: '', claudeConfigDir: '' })).toEqual({ command: 'unset CLAUDE_CONFIG_DIR; agy --model gemini-3.8-flash-medium', env: { WEDNESDAY_AGENT: 'agyworker', MAJORDOMO_AGENT: 'agyworker' } })
   })
   it('uses reported fractions and credits, rejecting inference and unsupported output', () => {
     expect(parseAgy(usage, 'usage')).toEqual([

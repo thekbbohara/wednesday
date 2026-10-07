@@ -128,7 +128,7 @@ export function chatPage(mem: Memory, before: number | null, limit: number): { i
 }
 
 /** What a citation chip shows. */
-export function describeRef(mem: Memory, ref: string, name = 'Majordomo'): { ref: string; title: string; body: string; date: string; source?: string; stale?: boolean } | null {
+export function describeRef(mem: Memory, ref: string, name = 'Wednesday'): { ref: string; title: string; body: string; date: string; source?: string; stale?: boolean } | null {
   if (ref.toLowerCase() === 'now') {
     const n = mem.nowGet()
     return { ref: 'Now', title: `Now, version ${n.version}`, body: n.text || '(empty)', date: n.updated_at }

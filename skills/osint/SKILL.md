@@ -48,7 +48,7 @@ Hard limits, enforced regardless of wording:
   real reason to look into. It is **not** for a stranger, an ex, or anyone the
   owner would be surveilling. If a request reads that way, stop and ask the
   owner to state the relationship and purpose; if it stays that way, decline.
-- Dossiers are **confidential** - they stay in Majordomo's memory and the owner's
+- Dossiers are **confidential** - they stay in Wednesday's memory and the owner's
   hands. Never publish one or quote the owner's private correspondence outside.
 
 Record the target, purpose, and (for a person) the relationship at the top of
@@ -162,7 +162,7 @@ source. "How to engage" is business framing - shared context, topics they care
 about, the right channel and tone - for the owner's own outreach, never
 manipulation or leverage.
 
-Hand durable findings back to Majordomo as facts (one atomic fact per call, each
+Hand durable findings back to Wednesday as facts (one atomic fact per call, each
 with its source), so "what do we know about X" recalls them. Tag the task
 Research (or Hacking for authorized infrastructure).
 

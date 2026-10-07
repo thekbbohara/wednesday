@@ -1,10 +1,10 @@
-# Majordomo
+# Wednesday
 
 A personal assistant you talk to in **one chat, forever**, that runs a crew of
 AI coding agents for you and never forgets.
 
 Long chats with an LLM degrade: the context fills up, gets compacted, and the
-model starts misremembering. Majordomo keeps its memory **outside** the model
+model starts misremembering. Wednesday keeps its memory **outside** the model
 session, in a small SQLite file, so the session can be thrown away and rebuilt
 at any time without losing anything. You give it the name you like
 (`ASSISTANT_NAME`, e.g. "Wednesday").
@@ -60,17 +60,17 @@ Development (UI with hot reload on :5788, API on :4788):
 pnpm dev
 # no tokens spent: a scripted captain and fake agents
 # ("spawn <name>" starts one, "ask <name>" one that shows a menu)
-MAJORDOMO_DATA_DIR=/tmp/majordomo-demo node test/demo-server.ts
+WEDNESDAY_DATA_DIR=/tmp/majordomo-demo node test/demo-server.ts
 ```
 
 ### Web UI
 
-agent-hq's roster layout (see `DESIGN.md`): a nav pill on the left, Majordomo's
+agent-hq's roster layout (see `DESIGN.md`): a nav pill on the left, Wednesday's
 portrait card (level, EXP, state) and the **Crew** roster on top (agent faces,
 padded with empty slots that start a new agent), and one big page card. Pages
 (the current one is in the URL, e.g. `#/tasks`):
 
-- **Command Center**: the chat. Messages sent while Majordomo is thinking are
+- **Command Center**: the chat. Messages sent while Wednesday is thinking are
   answered together; ids like `F3`, `T1`, `L42` open the record; receipts show
   what each reply wrote to memory; agent events, level-ups and the nightly
   sleep are one-line rows; a failed turn has **Retry**. It stays mounted on
@@ -81,7 +81,7 @@ padded with empty slots that start a new agent), and one big page card. Pages
   expand to goal, plan and result.
 - **Memory**: the Now note, every fact with its source (outdated ones on
   request, with what replaced them), daily digests, and search over facts,
-  tasks and the ledger (the same search Majordomo uses).
+  tasks and the ledger (the same search Wednesday uses).
 - **Settings**: captain model, web access, when sessions rotate, nightly
   sleep time and model. Changes save to `<data>/settings.json`, win over the
   env defaults, and apply from the next message without a restart.
@@ -97,7 +97,7 @@ captain's `captain_engine_set(engine, model?)` MCP tool.
 The engine and optional model persist in `<data>/settings.json` as `engine`
 and `engineModel`. The running turn finishes on its current engine; the next
 turn starts a fresh session with Now, facts and recent ledger context.
-Usage-limit fallback remains configurable with `MAJORDOMO_FALLBACKS`, for
+Usage-limit fallback remains configurable with `WEDNESDAY_FALLBACKS`, for
 example `codex,kimi`. The selected engine leads the configured chain.
 Kimi uses the `kimi` command from `<data>/runtimes.json` (default `kimi`),
 with a dedicated captain home under `<data>/kimi-captain`. Its authentication
@@ -106,9 +106,9 @@ its MCP servers and session workspaces are isolated from worker sessions.
 The Codex and Kimi CLIs must be installed and authenticated on the server.
 
 Antigravity (`agy`) must also be installed and already signed in. Its captain
-default is `claude-opus-4-6-thinking`; new agy workers explicitly launch with
+requires an explicit model selection; new agy workers explicitly launch with
 `gemini-3.8-flash-medium`. Override the captain with `/engine agy <model-id>`
-or Settings, and worker commands with `<data>/runtimes.json`. `agy models`
+or Settings after verifying account access. The CLI advertises `claude-opus-4-6-thinking`, but two local captain turns failed with unavailable/inaccessible errors; catalogue presence is not an access check. Keep Codex selected until verified. Override worker commands with `<data>/runtimes.json`. `agy models`
 lists the installed CLI's available ids.
 
 The agy captain generates a private agent definition per memory session under
@@ -123,7 +123,7 @@ provide its account quota separately without inference.
 
 ### Skills and EXP
 
-Majordomo levels up by doing work. Every task is tagged with the skill it trains
+Wednesday levels up by doing work. Every task is tagged with the skill it trains
 (the captain picks it): Coding, Design, Marketing, Hacking, Research, Writing,
 Ops. EXP is earned only from real, recorded work:
 
@@ -139,7 +139,7 @@ skills, the captain unlocks a new one with its `skill_add` tool (written to
 "New skill unlocked: OSINT". No duplicates, and the tree is capped at 16 skills.
 
 Levels cost 50 more EXP each (Lv 2 at 100, Lv 3 at 250, Lv 4 at 450, ...);
-Majordomo's own level grows on all EXP at a third of the pace. EXP lives in an
+Wednesday's own level grows on all EXP at a third of the pace. EXP lives in an
 append-only `exp` table, each row pointing at its task, so clicking a skill
 shows exactly what earned it. Add or recolor skills in `<data>/skills.json`:
 
@@ -156,8 +156,8 @@ ledger id and how full the captain's context is.
 ```sh
 cp .env.example .env            # set UID/GID to `id -u` / `id -g`
 docker compose up -d --build    # http://127.0.0.1:4788
-docker compose exec majordomo node src/cli.ts   # terminal chat in the container
-docker compose exec majordomo tmux -L majordomo attach -t majordomo_<name>   # watch an agent
+docker compose exec wednesday node src/cli.ts   # terminal chat in the container
+docker compose exec wednesday tmux -L majordomo attach -t majordomo_<name>   # watch an agent
 ```
 
 Agents run inside the container. Set `PROJECTS_DIR` to the folder holding the
@@ -170,10 +170,10 @@ prunable; that is expected.
 
 Memory lives in the `majordomo-data` volume. To keep it in a host folder,
 `mkdir -p data` first (Docker would create it as root) and set
-`MAJORDOMO_DATA=./data`. Your Claude login is mounted from `~/.claude` and
+`WEDNESDAY_DATA=./data`. Your Claude login is mounted from `~/.claude` and
 `~/.claude.json`. It listens on 127.0.0.1 only; before binding another address
-(`MAJORDOMO_BIND`, e.g. a Tailscale IP) set `MAJORDOMO_TOKEN` and open
-`/?token=<MAJORDOMO_TOKEN>` once to sign in.
+(`WEDNESDAY_BIND`, e.g. a Tailscale IP) set `WEDNESDAY_TOKEN` and open
+`/?token=<WEDNESDAY_TOKEN>` once to sign in.
 
 ## Configuration
 
@@ -183,27 +183,27 @@ environment. Everything else is environment variables (or `.env`):
 
 | Variable                  | Default            | Meaning |
 |---------------------------|--------------------|---------|
-| `ASSISTANT_NAME`          | `Majordomo`           | What the assistant calls itself (UI, prompts, agent briefs). |
-| `MAJORDOMO_FALLBACKS`        | none               | Captain fallback chain, e.g. `claude:~/.claude-2,codex`. |
-| `MAJORDOMO_LIMIT_COOLDOWN_MIN` | `180`            | Minutes a usage-limited provider is skipped before retry. |
-| `MAJORDOMO_DATA_DIR`         | `~/.majordomo`        | Holds `memory.db`; also the captain's working directory. |
-| `MAJORDOMO_MODEL`            | `opus`             | Captain model. |
-| `MAJORDOMO_ROTATE_AT`        | `0.4`              | Rotate when context passes this fraction of the window. |
-| `MAJORDOMO_MAX_TURNS`        | `40`               | Backstop: rotate after this many turns in one session. |
-| `MAJORDOMO_ALLOWED_TOOLS`    | `Read,Glob,Grep,Bash(git status:*),Bash(git log:*),Bash(git diff:*)` | Built-in tools for live checks. Memory tools are always on. |
-| `MAJORDOMO_RECALL_FACTS`     | `6`                | Facts recalled per message. |
-| `MAJORDOMO_RECALL_LEDGER`    | `4`                | Ledger hits recalled per message. |
-| `MAJORDOMO_TAIL_MESSAGES`    | `12`               | Recent conversation shown to a fresh session. |
-| `MAJORDOMO_TAIL_CHARS`       | `12000`            | Char budget for that tail. |
-| `MAJORDOMO_NOW_BUDGET_CHARS` | `8000`             | Hard cap on Now (~2k tokens). |
-| `MAJORDOMO_PROMPT_FILE`      | `prompts/captain.md` | Captain system prompt. |
-| `MAJORDOMO_TURN_TIMEOUT`     | `600`              | Seconds before a turn is abandoned. |
-| `MAJORDOMO_CLAUDE_BIN`       | `claude`           | Claude Code binary. |
+| `ASSISTANT_NAME`          | `Wednesday`           | What the assistant calls itself (UI, prompts, agent briefs). |
+| `WEDNESDAY_FALLBACKS`        | none               | Captain fallback chain, e.g. `claude:~/.claude-2,codex`. |
+| `WEDNESDAY_LIMIT_COOLDOWN_MIN` | `180`            | Minutes a usage-limited provider is skipped before retry. |
+| `WEDNESDAY_DATA_DIR`         | `~/.wednesday` (new installs) | Holds `memory.db`; also the captain's working directory. |
+| `WEDNESDAY_MODEL`            | `opus`             | Captain model. |
+| `WEDNESDAY_ROTATE_AT`        | `0.4`              | Rotate when context passes this fraction of the window. |
+| `WEDNESDAY_MAX_TURNS`        | `40`               | Backstop: rotate after this many turns in one session. |
+| `WEDNESDAY_ALLOWED_TOOLS`    | `Read,Glob,Grep,Bash(git status:*),Bash(git log:*),Bash(git diff:*)` | Built-in tools for live checks. Memory tools are always on. |
+| `WEDNESDAY_RECALL_FACTS`     | `6`                | Facts recalled per message. |
+| `WEDNESDAY_RECALL_LEDGER`    | `4`                | Ledger hits recalled per message. |
+| `WEDNESDAY_TAIL_MESSAGES`    | `12`               | Recent conversation shown to a fresh session. |
+| `WEDNESDAY_TAIL_CHARS`       | `12000`            | Char budget for that tail. |
+| `WEDNESDAY_NOW_BUDGET_CHARS` | `8000`             | Hard cap on Now (~2k tokens). |
+| `WEDNESDAY_PROMPT_FILE`      | `prompts/captain.md` | Captain system prompt. |
+| `WEDNESDAY_TURN_TIMEOUT`     | `600`              | Seconds before a turn is abandoned. |
+| `WEDNESDAY_CLAUDE_BIN`       | `claude`           | Claude Code binary. |
 | `HOST` / `PORT`           | `127.0.0.1` / `4788` | Web server address. |
-| `MAJORDOMO_TMUX_SOCKET`      | `majordomo`           | Private tmux socket for the agents. |
-| `MAJORDOMO_SLEEP_AT`         | `04:00`            | Local time of the nightly sleep; empty turns it off. |
-| `MAJORDOMO_SLEEP_MODEL`      | `haiku`            | Model for the sleep. |
-| `MAJORDOMO_TOKEN`            | none               | Shared secret for the web chat (cookie via `/?token=`, or `Authorization: Bearer`). |
+| `WEDNESDAY_TMUX_SOCKET`      | `majordomo`           | Private tmux socket for the agents. |
+| `WEDNESDAY_SLEEP_AT`         | `04:00`            | Local time of the nightly sleep; empty turns it off. |
+| `WEDNESDAY_SLEEP_MODEL`      | `haiku`            | Model for the sleep. |
+| `WEDNESDAY_TOKEN`            | none               | Shared secret for the web chat (cookie via `/?token=`, or `Authorization: Bearer`). |
 
 ## Agents
 
@@ -216,7 +216,7 @@ agents need `pnpm start` (the terminal chat alone cannot run them).
   key for ticket work). Removing an agent deletes the worktree only when it
   has no uncommitted changes; the branch always stays.
 - **Running**: agents live in tmux on the private `majordomo` socket
-  (`MAJORDOMO_TMUX_SOCKET`), so they keep running across Majordomo restarts. Attach
+  (`WEDNESDAY_TMUX_SOCKET`), so they keep running across Wednesday restarts. Attach
   with `tmux -L majordomo attach -t majordomo_<name>`. The brief is typed in once
   the agent is idle at its prompt. Claude Code workers run with
   `--permission-mode auto` and never add a co-author line to commits.
@@ -225,7 +225,7 @@ agents need `pnpm start` (the terminal chat alone cannot run them).
   from the Claude Stop hook or Codex notify; for other runtimes, when the
   screen goes quiet), `needs` (a prompt has been on screen for 2s), `exit` or
   `error`. Events arriving while the captain is busy are handled together.
-- **Prompts**: the folder-trust prompt for a worktree Majordomo created is
+- **Prompts**: the folder-trust prompt for a worktree Wednesday created is
   accepted automatically. Every other prompt goes to the captain, which only
   answers what is clearly safe and inside the job, and asks you otherwise.
 - **Quiet**: when an event needs nothing from you, the captain replies
@@ -245,7 +245,7 @@ To use a restricted worker policy, override its command, for example:
 [{ "id": "codex", "command": "codex --sandbox workspace-write --ask-for-approval on-request" }]
 ```
 
-Runtime commands are loaded when Majordomo starts. Changes apply to future
+Runtime commands are loaded when Wednesday starts. Changes apply to future
 workers after the next planned restart; running workers keep their session
 permissions. To change an existing Codex session while idle, use `/permissions`
 and select the full access preset, then confirm it. Do not interrupt an active
@@ -253,7 +253,7 @@ turn just to change permissions.
 
 ## OSINT
 
-Majordomo runs open-source intelligence and relationship research for your own
+Wednesday runs open-source intelligence and relationship research for your own
 legitimate use: your or others' digital footprint, domains and infrastructure
 you own or are authorized to assess, company/vendor/client due diligence,
 verifying claims and accounts, and full dossiers on people you work with or
@@ -315,7 +315,7 @@ limit it tries the configured fallback providers, then returns to the selected
 engine after its cooldown. Set fallbacks in `.env`:
 
 ```sh
-MAJORDOMO_FALLBACKS=claude:~/.claude-2,codex,kimi
+WEDNESDAY_FALLBACKS=claude:~/.claude-2,codex,kimi
 ```
 
 - `claude:<config dir>` - another Claude account with its own `CLAUDE_CONFIG_DIR`.
@@ -326,7 +326,7 @@ MAJORDOMO_FALLBACKS=claude:~/.claude-2,codex,kimi
   the turn cap for rotation.
 
 A provider switch starts a fresh session rebuilt from memory. Usage-limit
-errors put that provider on cooldown (`MAJORDOMO_LIMIT_COOLDOWN_MIN`, default
+errors put that provider on cooldown (`WEDNESDAY_LIMIT_COOLDOWN_MIN`, default
 180), and the next provider is tried. When all are limited, the captain says so.
 `opencode` and `agy` remain worker runtimes.
 
@@ -355,7 +355,7 @@ Empty means the default login (`~/.claude`). The folder must exist; Settings
 shows whether it is logged in. A change applies at the captain's next turn (on a
 fresh session, since sessions live in the account's folder), the next sleep and
 the next worker spawn, without a restart. Its default is `CLAUDE_CONFIG_DIR`
-from the server's environment. `MAJORDOMO_FALLBACKS` entries keep their own
+from the server's environment. `WEDNESDAY_FALLBACKS` entries keep their own
 accounts, so `claude:~/.claude` makes the default login a fallback.
 
 Give one worker runtime a different account in `<data>/runtimes.json`, so the
@@ -374,8 +374,8 @@ In Docker, mount each extra config dir the same way `~/.claude` is mounted.
 
 ## Nightly sleep
 
-Once a day (`MAJORDOMO_SLEEP_AT`, default 04:00 local, run by the web server) a
-cheap model (`MAJORDOMO_SLEEP_MODEL`, default haiku) reads the ledger since the
+Once a day (`WEDNESDAY_SLEEP_AT`, default 04:00 local, run by the web server) a
+cheap model (`WEDNESDAY_SLEEP_MODEL`, default haiku) reads the ledger since the
 last sleep, one day at a time, next to the current facts, and proposes:
 
 - **add** a durable fact stated that day (with the L id it came from),
@@ -398,7 +398,7 @@ node src/sleep.ts --dry-run    # show what it would change
 node src/sleep.ts              # run it now
 ```
 
-The prompt is `prompts/sleep.md` (`MAJORDOMO_SLEEP_PROMPT_FILE`).
+The prompt is `prompts/sleep.md` (`WEDNESDAY_SLEEP_PROMPT_FILE`).
 
 ## Long-run eval
 
@@ -419,7 +419,7 @@ that it does not degrade over a very long chat:
 ```sh
 node src/eval/run.ts --data /tmp/majordomo-eval --turns 520 --model haiku    # resumable
 node src/eval/run.ts --data /tmp/majordomo-eval --report                      # report only
-MAJORDOMO_MAX_TURNS=10 node src/eval/run.ts --data /tmp/smoke --turns 40 --plants 4 --sleep-every 20
+WEDNESDAY_MAX_TURNS=10 node src/eval/run.ts --data /tmp/smoke --turns 40 --plants 4 --sleep-every 20
 ```
 
 It writes `eval.jsonl` (one line per turn), `report.md` and `report.json` into
@@ -478,7 +478,7 @@ Measured, 2026-10-03, Claude Code 2.1.289:
   menus to dodge.
 - `--setting-sources "" --strict-mcp-config --system-prompt` shrinks the
   baseline from ~30k tokens (user CLAUDE.md, hooks, plugins) to ~400, so the
-  captain's context holds only what Majordomo puts there. A primed captain turn
+  captain's context holds only what Wednesday puts there. A primed captain turn
   with tools is ~9-10k tokens (5% of a 200k window).
 
 Trade-off: no streaming of partial replies in the terminal yet; each turn
@@ -506,14 +506,14 @@ pnpm test          # memory, retrieval quality, MCP over stdio, captain loop and
 pnpm test:live     # real claude (haiku): rotate, then a fresh session must answer
                    # "what are we doing and why" from memory alone (tail disabled),
                    # and must say "I don't have that" for an unknown fact
-MAJORDOMO_LIVE=1 npx vitest run test/sleep.test.ts   # real sleep on a seeded day: a
+WEDNESDAY_LIVE=1 npx vitest run test/sleep.test.ts   # real sleep on a seeded day: a
                    # contradiction, a duplicate, a new fact and chit-chat
 pnpm typecheck
 ```
 
 ## Schema changes
 
-The schema is created only on a brand-new file. On a version mismatch Majordomo
+The schema is created only on a brand-new file. On a version mismatch Wednesday
 refuses to start instead of migrating, and prints the command to run by hand:
 
 ```sh
@@ -521,7 +521,7 @@ node src/migrate.ts ~/.majordomo/memory.db     # backs up to memory.db.bak-v<old
 ```
 
 v2 (step 3) added the `agents` table; v3 added task skills and the `exp`
-table. Majordomo also refuses to open a SQLite
+table. Wednesday also refuses to open a SQLite
 file that is not its own.
 
 ## Layout
@@ -559,3 +559,21 @@ test/demo-server.ts      scripted captain + fake agents for UI work
 ## License
 
 MIT. See `LICENSE`.
+
+## Wednesday compatibility
+
+The assistant and CLI are now Wednesday (`wednesday`; `majordomo` remains an alias).
+All application `WEDNESDAY_*` variables take precedence over their `MAJORDOMO_*`
+aliases, including empty values. `ASSISTANT_NAME` still customizes the display name.
+Existing `.majordomo`, then `.jarvis` directories remain in place and are reused;
+only fresh installs default to `.wednesday`. Set `WEDNESDAY_DATA_DIR` explicitly
+when multiple directories exist. Never rename a live memory directory.
+
+MCP namespace `majordomo`, progress fields, ledger skill IDs, local drafts, worker
+branch/session prefixes and the default `majordomo` tmux socket are compatibility
+identities. Existing captain conversations and workers keep routing through them.
+New sign-ins use `wednesday_token`; existing `majordomo_token` cookies still work.
+Docker uses service/image `wednesday` and retains the existing `majordomo-data`
+volume. Use the same Compose project name during activation, or a different
+project can silently allocate a fresh volume. See `reports/T50/README.md` for
+guarded activation and the Telegram duplicate diagnosis.

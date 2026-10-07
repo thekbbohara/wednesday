@@ -1,4 +1,5 @@
-// Majordomo web server: the chat API, live events, and the built UI.
+import { assistantEnv } from './env.ts'
+// Wednesday web server: the chat API, live events, and the built UI.
 import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
@@ -43,9 +44,9 @@ export interface Status {
   thinking: boolean
   agents: Agent[]
   model: string
-  /** When Majordomo last replied, for "Active 2m ago". */
+  /** When Wednesday last replied, for "Active 2m ago". */
   lastReplyAt: string | null
-  /** Majordomo overall, from all EXP. */
+  /** Wednesday overall, from all EXP. */
   majordomo: Progress
   skills: SkillView[]
   /** Tasks waiting on the owner, for the nav badge. */
@@ -139,13 +140,13 @@ export function createApp(opts: {
     app.use('*', async (c, next) => {
       const url = new URL(c.req.url)
       if (url.searchParams.get('token') === token) {
-        c.header('set-cookie', `majordomo_token=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000`)
+        c.header('set-cookie', `wednesday_token=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000`)
         return next()
       }
-      const cookie = c.req.header('cookie')?.match(/(?:^|;\s*)majordomo_token=([^;]+)/)?.[1]
+      const cookie = c.req.header('cookie')?.match(/(?:^|;\s*)(?:wednesday|majordomo)_token=([^;]+)/)?.[1]
       const bearer = c.req.header('authorization')?.replace(/^Bearer\s+/i, '')
       if (cookie === token || bearer === token) return next()
-      return c.text('majordomo: open /?token=<MAJORDOMO_TOKEN> once to sign in', 401)
+      return c.text('wednesday: open /?token=<WEDNESDAY_TOKEN> once to sign in', 401)
     })
   }
 
@@ -419,13 +420,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const mem = new Memory(cfg.dbPath, { nowBudgetChars: cfg.nowBudgetChars })
   // Getters, so changes made in Settings apply to the next turn.
 
-  const host = process.env.HOST || '127.0.0.1'
-  const port = Number(process.env.PORT || 4788)
-  const token = process.env.MAJORDOMO_TOKEN || undefined
-  if (!token && host !== '127.0.0.1' && host !== 'localhost') console.warn(`warning: listening on ${host} without MAJORDOMO_TOKEN`)
+  const host = assistantEnv('BIND') || process.env.HOST || '127.0.0.1'
+  const port = Number(assistantEnv('PORT') || process.env.PORT || 4788)
+  const token = assistantEnv('TOKEN') || undefined
+  if (!token && host !== '127.0.0.1' && host !== 'localhost') console.warn(`warning: listening on ${host} without WEDNESDAY_TOKEN`)
   // Where agents' hooks and the captain's tools reach this server (loopback when listening on all addresses).
   const selfUrl = `http://${host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host}:${port}`
-  const supervisor = new Supervisor({ mem, name: cfg.name, dataDir: cfg.dataDir, socket: process.env.MAJORDOMO_TMUX_SOCKET || 'majordomo', hook: { url: selfUrl, token }, claudeConfigDir: () => cfg.claudeConfigDir })
+  const supervisor = new Supervisor({ mem, name: cfg.name, dataDir: cfg.dataDir, socket: assistantEnv('TMUX_SOCKET') || 'majordomo', hook: { url: selfUrl, token }, claudeConfigDir: () => cfg.claudeConfigDir })
   supervisor.start()
   const { app } = createApp({ mem, cfg, runnerFor: (p) => buildRunner(p, cfg), token, supervisor, selfUrl, persistSettings: true, webRoot: resolve(import.meta.dirname, '../dist') })
   startSleepSchedule(mem, cfg, new ClaudeSleepModel({ bin: cfg.claudeBin, model: () => cfg.sleepModel, promptFile: cfg.sleepPromptFile, timeoutSec: cfg.turnTimeout, cwd: cfg.dataDir, name: cfg.name, configDir: () => cfg.claudeConfigDir }))

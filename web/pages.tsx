@@ -5,7 +5,7 @@ import { Face } from "./Face";
 import { Reply } from "./Reply";
 import { ExpBar, SkillIcon } from "./Skills";
 import { fullTime } from "./thread";
-import { AGY_CAPTAIN_MODEL, AGY_MODELS, ENGINES } from "../src/engines";
+import { AGY_MODELS, ENGINES } from "../src/engines";
 
 type OnRef = (ref: string, e: MouseEvent<HTMLElement>) => void;
 
@@ -488,7 +488,8 @@ export function SettingsPage({ name, onUsages }: { name: string; onUsages?: () =
             s.engine === "agy" ? "engineModel" : "model",
             "Model",
             `The model ${name} thinks with. Applies from the next message.`,
-            s.engine === "agy" ? <select id="set-engineModel" name="engineModel" className="select" value={s.engineModel || AGY_CAPTAIN_MODEL} onChange={(e) => save({ engineModel: e.target.value })}>
+            s.engine === "agy" ? <select id="set-engineModel" name="engineModel" className="select" value={s.engineModel} onChange={(e) => save({ engineModel: e.target.value })}>
+              <option value="">Select a verified model</option>
               {!AGY_MODELS.some(m => m.id === s.engineModel) && s.engineModel && <option value={s.engineModel}>{s.engineModel}</option>}
               {AGY_MODELS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select> : <select id="set-model" name="model" className="select" value={s.model} onChange={(e) => save({ model: e.target.value })}>
@@ -563,7 +564,7 @@ export function SettingsPage({ name, onUsages }: { name: string; onUsages?: () =
             <dt>Data folder</dt>
             <dd className="mono">{data.about.dataDir}</dd>
             <dt>Sign-in token</dt>
-            <dd>{data.about.token ? "on" : "off (fine on localhost; set MAJORDOMO_TOKEN before exposing it)"}</dd>
+            <dd>{data.about.token ? "on" : "off (fine on localhost; set WEDNESDAY_TOKEN before exposing it)"}</dd>
             <dt>Agent runtimes</dt>
             <dd>
               {data.about.runtimes.length
