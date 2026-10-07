@@ -158,7 +158,9 @@ export function buildServer(mem: Memory, session: string | null, agentApi: Agent
   server.registerTool(
     'task_update',
     {
-      description: 'Update a task. Set status done (with result) when finished, waiting_owner when blocked on the owner.',
+      description:
+        'Update a task. Set status done (with result) when finished; delivered work awaiting review is done too. ' +
+        'Set waiting_owner only for a decision on the owner-only list, with result saying exactly what the owner must do or decide.',
       inputSchema: {
         id: z.number().int(),
         title: z.string().optional(),
@@ -171,6 +173,8 @@ export function buildServer(mem: Memory, session: string | null, agentApi: Agent
     },
     guard(({ id, skill, ...patch }) => {
       if (skill) checkSkill(skill)
+      if (patch.status === 'waiting_owner' && !patch.result?.trim())
+        throw new Error('waiting_owner needs a result: the exact thing the owner must do or decide, and why you cannot decide it yourself')
       const t = mem.taskUpdate(id, { ...patch, ...(skill ? { skill: skill === 'none' ? undefined : skill } : {}) }, session)
       return `T${t.id} is ${t.status}.`
     }),

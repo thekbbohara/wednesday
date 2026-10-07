@@ -64,6 +64,8 @@ describe('majordomo MCP server', () => {
     expect(text(await call('task_create', { title: 'Build memory', goal: 'captain survives rotation', skill: 'coding' }))).toBe('Created T1 (coding).')
     expect((await call('task_create', { title: 'x', goal: 'y', skill: 'juggling' })).isError).toBe(true)
     expect(text(await call('log_decision', { decision: 'Use SQLite FTS5', reason: 'one file, no servers' }))).toMatch(/^Logged L\d+\.$/)
+    expect((await call('task_update', { id: 1, status: 'waiting_owner' })).isError).toBe(true)
+    expect(text(await call('task_update', { id: 1, status: 'waiting_owner', result: 'Needs owner: approve the $20 plan' }))).toBe('T1 is waiting_owner.')
     expect(text(await call('task_update', { id: 1, status: 'done', result: 'shipped' }))).toBe('T1 is done.')
     const m = new Memory(db)
     expect(m.expBySkill().get('coding')).toBe(35)
