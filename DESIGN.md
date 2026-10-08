@@ -250,3 +250,12 @@ Selection and arrows use --blue-deep. A compact inspector edits selection;
 on phones it narrows to 132px. Zoom controls stay in the footer. Canvas motion
 is direct manipulation, without transitions. Long source text scrolls inside
 items, while canvas pan and zoom stay independent of the page shell.
+
+## Installed agent skills (T55)
+
+Below the EXP tree, Installed skills lists actual agent capabilities in the same
+responsive grid, --panel-2 cards, 18px radius and 16px gaps. Fredoka names,
+13px descriptions and blue place pills distinguish Wednesday and ClipCrew.
+Descriptions wrap to readable text; expandable sources show every original
+SKILL.md path and resolved symlink target in wrapping monospace. Refresh reads
+current installations, and loading, empty and error states stay in this section.

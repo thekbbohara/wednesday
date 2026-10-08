@@ -47,6 +47,8 @@ const shortTime = (ts: string) => fullTime(ts).replace(/ \d{4},/, ",");
 
 export function SkillsPage({ version, onSkill, onRef }: { version: number; onSkill: (id: string, e: MouseEvent<HTMLElement>) => void; onRef: OnRef }) {
   const { data, error } = useLoad(api.skills, version);
+  const [refresh, setRefresh] = useState(0);
+  const installed = useLoad(api.agentSkills, refresh);
   return (
     <>
       <PageHead title="Skills">
@@ -66,6 +68,38 @@ export function SkillsPage({ version, onSkill, onRef }: { version: number; onSki
             ))}
           </div>
         )}
+        <section className="installed-skills" aria-labelledby="installed-skills-title">
+          <div className="installed-skills__head">
+            <h3 id="installed-skills-title">Installed skills{installed.data ? ` (${installed.data.skills.length})` : ""}</h3>
+            <button className="btn" onClick={() => setRefresh((v) => v + 1)}>Refresh</button>
+          </div>
+          <p className="page__muted">Agent capabilities available to Wednesday and ClipCrew.</p>
+          {installed.error ? <Loading error={installed.error} /> : !installed.data ? <Loading error="" /> : !installed.data.skills.length ? (
+            <p className="page__muted">No installed agent skills found.</p>
+          ) : (
+            <div className="skill-grid">
+              {installed.data.skills.map((skill) => (
+                <article className="skill-card installed-skill" key={skill.name}>
+                  <h4 className="skill-card__name">{skill.name}</h4>
+                  <div className="installed-skill__places">
+                    {[...new Set(skill.installations.map((item) => item.place))].map((place) => <span className="lv" key={place}>{place}</span>)}
+                  </div>
+                  <p className="installed-skill__description" title={skill.description}>{skill.description || "No description provided."}</p>
+                  <details>
+                    <summary>Sources and paths ({skill.installations.length})</summary>
+                    {skill.installations.map((item) => (
+                      <div className="installed-skill__source" key={item.path}>
+                        <b>{item.place} · {item.source}</b>
+                        <code>{item.path}</code>
+                        {item.resolvedPath !== item.path && <code>Resolves to {item.resolvedPath}</code>}
+                      </div>
+                    ))}
+                  </details>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </>
   );

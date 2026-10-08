@@ -2230,3 +2230,18 @@ button.chip:hover {
 .settings-usage p:not(.micro) { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0 0 8px; }
 .settings-usage a { color: var(--blue-deep); font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; }
 .settings-usage a:focus-visible { outline: 2px solid var(--blue-deep); outline-offset: 4px; border-radius: 4px; }
+
+.installed-skills { margin-top: 28px; border-top: 1px solid var(--line); padding-top: 20px; }
+.installed-skills__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.installed-skills__head h3 { margin: 0; font: 600 18px var(--display); }
+.installed-skills__head button { min-height: 44px; }
+.installed-skill h4 { margin: 0; overflow-wrap: anywhere; }
+.installed-skill__places { display: flex; flex-wrap: wrap; gap: 6px; }
+.installed-skill__places .lv { color: var(--blue-deep); background: color-mix(in srgb, var(--blue-deep) 14%, transparent); }
+.installed-skill__description { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; margin: 0; font-size: 13px; line-height: 1.55; color: var(--muted); }
+.installed-skill details { margin-top: auto; font-size: 12px; color: var(--muted); }
+.installed-skill summary { cursor: pointer; padding: 8px 0; }
+.installed-skill__source { border-top: 1px solid var(--line); padding: 8px 0; display: grid; gap: 4px; }
+.installed-skill__source code { font-size: 11px; overflow-wrap: anywhere; }
+.installed-skill { align-self: start; }
+.installed-skill .skill-card__name { flex: none; }

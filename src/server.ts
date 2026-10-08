@@ -1,3 +1,4 @@
+import { installedSkills } from './skills/installed.ts'
 import { planApi } from './plan.ts'
 import { assistantEnv } from './env.ts'
 // Wednesday web server: the chat API, live events, and the built UI.
@@ -207,6 +208,11 @@ export function createApp(opts: {
   })
 
   // ---- pages: skills, tasks, memory, settings ------------------------------
+
+  app.get('/api/agent-skills', async (c) => {
+    c.header('Cache-Control', 'no-store')
+    return c.json({ skills: await installedSkills() })
+  })
 
   app.get('/api/skills', (c) => {
     const exp = mem.expBySkill()

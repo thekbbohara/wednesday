@@ -25,6 +25,12 @@ export interface Progress {
   next: number;
 }
 
+export interface InstalledSkill {
+  name: string;
+  description: string;
+  installations: { place: "Wednesday" | "ClipCrew"; source: string; path: string; resolvedPath: string }[];
+}
+
 export interface SkillView extends Progress {
   id: string;
   name: string;
@@ -183,6 +189,7 @@ export const api = {
     ),
   agent: (id: string) => fetch(`/api/agents/${encodeURIComponent(id)}`).then((r) => json<AgentDetail>(r)),
   skill: (id: string) => fetch(`/api/skills/${encodeURIComponent(id)}`).then((r) => json<SkillDetail>(r)),
+  agentSkills: () => fetch("/api/agent-skills").then((r) => json<{ skills: InstalledSkill[] }>(r)),
   skills: () => fetch("/api/skills").then((r) => json<{ skills: (SkillView & { recent: ExpEvent[] })[]; rules: SkillDetail["rules"] }>(r)),
   tasks: () => fetch("/api/tasks").then((r) => json<{ tasks: TaskRow[] }>(r)),
   memory: () => fetch("/api/memory").then((r) => json<MemoryView>(r)),
