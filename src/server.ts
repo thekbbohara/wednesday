@@ -1,4 +1,5 @@
-import { keysApi, type KeyStore } from './api-keys.ts'
+import { KeyStore, keysApi } from './api-keys.ts'
+import { Speech, ttsApi } from './tts.ts'
 import { installedSkills } from './skills/installed.ts'
 import { planApi } from './plan.ts'
 import { assistantEnv } from './env.ts'
@@ -79,6 +80,8 @@ export function createApp(opts: {
   credits?: Pick<Credits, 'read'>
   /** API key store; defaults to <secrets>/keys.json. */
   keys?: KeyStore
+  /** Text-to-speech; defaults to ElevenLabs with <data>/cache/tts. */
+  speech?: Speech
 }) {
   const { mem, cfg, token, supervisor: sup } = opts
   // A single runner (tests/demo) is used for every provider; otherwise build per provider.
@@ -161,7 +164,9 @@ export function createApp(opts: {
     return c.json(await credits.read(cfg))
   })
 
-  app.route('/api/keys', keysApi(opts.keys))
+  const keys = opts.keys ?? new KeyStore()
+  app.route('/api/keys', keysApi(keys))
+  app.route('/api/tts', ttsApi(opts.speech ?? new Speech({ store: keys, cacheDir: join(cfg.dataDir, 'cache/tts') })))
 
   app.route('/api/plan', planApi(cfg.dataDir))
 
