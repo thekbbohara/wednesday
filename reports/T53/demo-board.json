@@ -1,0 +1,164 @@
+{
+  "id": "c666e17e-e0cc-4213-8714-38043c0c706a",
+  "name": "Ideas into action",
+  "items": [
+    {
+      "id": "621d1084-9c3b-4bba-b6a1-65f72a5e532b",
+      "kind": "group",
+      "x": 20,
+      "y": 20,
+      "w": 620,
+      "h": 340,
+      "title": "Explore",
+      "body": "",
+      "color": "plain",
+      "tags": [],
+      "status": "idea",
+      "tasks": []
+    },
+    {
+      "id": "b7c7c05e-4e3d-40a2-8d81-1ff8a54e1bb6",
+      "kind": "card",
+      "x": 40,
+      "y": 100,
+      "w": 240,
+      "h": 210,
+      "title": "Capture the spark",
+      "body": "quote: Start before it is perfect\n\ntimestamp: 02:14\n\nsource: sample",
+      "color": "plain",
+      "tags": [
+        "research"
+      ],
+      "status": "idea",
+      "tasks": []
+    },
+    {
+      "id": "d2fd0628-6078-420e-a874-a99236124f61",
+      "kind": "card",
+      "x": 350,
+      "y": 100,
+      "w": 240,
+      "h": 210,
+      "title": "Choose one direction",
+      "body": "body: Compare the strongest ideas\n\nstatus: planned",
+      "color": "plain",
+      "tags": [],
+      "status": "planned",
+      "tasks": []
+    },
+    {
+      "id": "e94e567c-663e-4480-97ea-6e22fe70b1bd",
+      "kind": "group",
+      "x": 670,
+      "y": 20,
+      "w": 620,
+      "h": 340,
+      "title": "Make it happen",
+      "body": "",
+      "color": "plain",
+      "tags": [],
+      "status": "idea",
+      "tasks": []
+    },
+    {
+      "id": "7c85eda4-e6cb-48d5-93b6-b57a8c0cea79",
+      "kind": "card",
+      "x": 690,
+      "y": 100,
+      "w": 240,
+      "h": 210,
+      "title": "Build a small prototype",
+      "body": "status: doing",
+      "color": "plain",
+      "tags": [
+        "coding"
+      ],
+      "status": "doing",
+      "tasks": []
+    },
+    {
+      "id": "40c87d7a-d343-4b92-8028-522324924239",
+      "kind": "note",
+      "x": 350,
+      "y": 420,
+      "w": 240,
+      "h": 210,
+      "title": "Try a smaller first step",
+      "body": "What can we learn in one afternoon?",
+      "color": "amber",
+      "tags": [],
+      "status": "idea",
+      "tasks": []
+    },
+    {
+      "id": "6029d0c6-dd96-4b50-aa76-2429410c1dd6",
+      "kind": "note",
+      "x": 660,
+      "y": 420,
+      "w": 240,
+      "h": 210,
+      "title": "Keep the useful quotes",
+      "body": "Sources stay with every imported idea.",
+      "color": "amber",
+      "tags": [],
+      "status": "idea",
+      "tasks": []
+    },
+    {
+      "id": "bef1ffa6-fd6b-4456-a7b9-334a259d1e59",
+      "kind": "note",
+      "x": 970,
+      "y": 420,
+      "w": 240,
+      "h": 210,
+      "title": "A place for loose thoughts",
+      "body": "Double-click anywhere. Start thinking.",
+      "color": "amber",
+      "tags": [],
+      "status": "idea",
+      "tasks": []
+    },
+    {
+      "id": "fc577311-f927-4003-9cb7-57be559ff472",
+      "kind": "card",
+      "x": 1000,
+      "y": 100,
+      "w": 240,
+      "h": 210,
+      "title": "Ask Wednesday to help",
+      "body": "Turn the strongest idea into a concrete next step.",
+      "color": "blue",
+      "tags": [],
+      "status": "planned",
+      "tasks": [
+        "T1"
+      ]
+    },
+    {
+      "id": "7242cb54-269c-4125-8dff-77639b81903b",
+      "kind": "card",
+      "x": 40,
+      "y": 420,
+      "w": 240,
+      "h": 210,
+      "title": "Share the next step",
+      "body": "",
+      "color": "plain",
+      "tags": [],
+      "status": "idea",
+      "tasks": []
+    }
+  ],
+  "connectors": [
+    {
+      "id": "053ec2e0-f666-40b1-ac9b-a2d254c0e24e",
+      "from": "b7c7c05e-4e3d-40a2-8d81-1ff8a54e1bb6",
+      "to": "d2fd0628-6078-420e-a874-a99236124f61"
+    },
+    {
+      "id": "7b19ff47-7049-475f-9b03-88acfd90a2ad",
+      "from": "7c85eda4-e6cb-48d5-93b6-b57a8c0cea79",
+      "to": "fc577311-f927-4003-9cb7-57be559ff472"
+    }
+  ]
+}

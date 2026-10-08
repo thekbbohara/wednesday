@@ -1,0 +1,259 @@
+.plan-tools {
+  display: flex;
+  gap: 6px;
+  padding: 8px 20px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--line);
+}
+.plan-tools button,
+.plan-footer button,
+.plan-inspector button {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  padding: 7px 12px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.plan-tools button:hover,
+.plan-footer button:hover {
+  background: var(--panel-2);
+}
+.plan-tools input,
+.plan-tools select,
+.plan-inspector input,
+.plan-inspector select {
+  min-width: 0;
+  max-width: 180px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 7px 9px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+}
+.plan-tools input {
+  width: 130px;
+}
+.plan-tools input[aria-label="Filter tag"] {
+  width: 70px;
+}
+.plan-save {
+  font-size: 12px;
+  color: var(--muted);
+}
+.plan-workspace {
+  display: flex;
+  flex: 1;
+  min-height: 180px;
+  overflow: hidden;
+}
+.plan-canvas {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  touch-action: none;
+  background-color: var(--panel-2);
+  background-image: radial-gradient(var(--line) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+.plan-canvas.is-panning {
+  cursor: grab;
+}
+.plan-world {
+  position: absolute;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.plan-item {
+  position: absolute;
+  pointer-events: auto;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 18px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  cursor: move;
+  box-shadow:
+    0 1px 0 rgba(20, 30, 60, 0.04),
+    0 8px 24px -12px rgba(20, 30, 60, 0.12);
+}
+.plan-item--group {
+  background: rgba(92, 189, 244, 0.06);
+  border: 2px dashed var(--line);
+  box-shadow: none;
+  pointer-events: none;
+}
+.plan-item--group > input,
+.plan-item--group > button {
+  pointer-events: auto;
+}
+.plan-item.is-selected {
+  outline: 2px solid var(--blue-deep);
+}
+.plan-item.is-filtered {
+  opacity: 0.18;
+}
+.plan-color--blue {
+  background: #e6f5fe;
+}
+.plan-color--mint {
+  background: #e2f7ef;
+}
+.plan-color--amber {
+  background: #fff0d7;
+}
+.plan-color--pink {
+  background: #fde9f1;
+}
+.plan-item input {
+  font:
+    600 15px Inter,
+    sans-serif;
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  width: 100%;
+  padding: 0 0 10px;
+  cursor: text;
+}
+.plan-item textarea {
+  flex: 1;
+  min-height: 20px;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  resize: none;
+  font:
+    13px/1.55 Inter,
+    sans-serif;
+  color: var(--ink);
+}
+.plan-item-meta {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  max-height: 52px;
+  overflow: auto;
+  padding-top: 6px;
+}
+.plan-item-meta .chip {
+  font-size: 10px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plan-resize {
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: nwse-resize;
+}
+.plan-lines {
+  position: absolute;
+  overflow: visible;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+.plan-lines line {
+  stroke: var(--blue-deep);
+  stroke-width: 2;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+.plan-lines line.selected {
+  stroke: var(--coral);
+  stroke-width: 4;
+}
+.plan-marquee {
+  position: absolute;
+  border: 1px solid var(--blue-deep);
+  background: #2b8fd822;
+}
+.plan-inspector {
+  width: 200px;
+  padding: 16px;
+  border-left: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: auto;
+  font-size: 13px;
+}
+.plan-inspector label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.plan-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border-top: 1px solid var(--line);
+}
+.plan-footer span {
+  flex: 1;
+  font-size: 11px;
+  color: var(--muted);
+}
+@media (max-width: 759px) {
+  .plan-tools {
+    padding: 6px 12px;
+    gap: 4px;
+  }
+  .plan-tools button {
+    padding: 7px 9px;
+  }
+  .plan-inspector {
+    width: 132px;
+    padding: 10px;
+    gap: 8px;
+  }
+  .plan-footer {
+    padding: 8px 12px;
+    flex-wrap: wrap;
+  }
+  .plan-footer span {
+    flex-basis: 100%;
+  }
+  .nav {
+    grid-template-columns: repeat(7, 1fr) !important;
+  }
+  .nav__btn {
+    min-width: 44px;
+  }
+}
+.plan-handle {
+  pointer-events: auto;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 8px;
+  cursor: move;
+  user-select: none;
+}
+.plan-inspector {
+  flex-shrink: 0;
+}
+.plan-tools button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.plan-item input:focus,
+.plan-item textarea:focus {
+  outline: 1px solid var(--blue-deep);
+  border-radius: 4px;
+}

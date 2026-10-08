@@ -1,4 +1,4 @@
-export const PAGE_IDS = ['command', 'skills', 'tasks', 'memory', 'credits', 'settings'] as const;
+export const PAGE_IDS = ['command', 'skills', 'tasks', 'memory', 'credits', 'plan', 'settings'] as const;
 export type PageId = typeof PAGE_IDS[number];
 
 export function pageFromUrl(url: Pick<URL, 'pathname' | 'hash'>): PageId {

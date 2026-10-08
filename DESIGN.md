@@ -237,3 +237,16 @@ explicit UTC; the page shows browser-local times with timezone abbreviations.
 The existing design contract is prose-only and has no YAML token front matter.
 The design.md linter reports this as one warning and zero errors. T48 preserves
 that established format rather than rewriting the unrelated design contract.
+
+## Plan canvas (T53)
+
+Plan lives at `#/plan`, between usage and Settings, in the existing white page
+card. It follows the Game studio, light tokens, Inter body and Fredoka heading.
+The mobile nav now has seven controls, each at least 44px wide.
+Board controls and editing tools wrap above a clipped, dotted --panel-2 canvas.
+Notes use the existing amber, blue, mint and skill pink tints; idea cards are
+white with 18px radius. Frames use a soft blue tint and dashed --line border.
+Selection and arrows use --blue-deep. A compact inspector edits selection;
+on phones it narrows to 132px. Zoom controls stay in the footer. Canvas motion
+is direct manipulation, without transitions. Long source text scrolls inside
+items, while canvas pan and zoom stay independent of the page shell.

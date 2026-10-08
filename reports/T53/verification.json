@@ -1,0 +1,50 @@
+{
+  "instance": "http://127.0.0.1:4793",
+  "storage": "isolated temp directory",
+  "inference": "stub runner only, zero paid inference",
+  "demo": {
+    "items": 10,
+    "frames": 2,
+    "connectors": 2,
+    "task": "T1",
+    "import": "test/fixtures/plan-ideas.json"
+  },
+  "browserChecks": {
+    "reloadPersists": true,
+    "selectedBoardRemembered": true,
+    "frameMovesChildren": true,
+    "undoRestoresFrameAndChildren": true,
+    "connectorCreationAndUndo": true,
+    "copyPasteAndUndo": true,
+    "resizeAndUndo": true,
+    "marqueeSelects10Items": true,
+    "liveTaskChip": true,
+    "sendViaChatApi": true,
+    "wheelZoom": true,
+    "noHorizontalPageOverflow": true,
+    "createRenameDeleteBoards": true
+  },
+  "viewports": [
+    1440,
+    1024,
+    768,
+    390,
+    375
+  ],
+  "actualT52MenuImport": {
+    "items": 62,
+    "frames": 5,
+    "maxBodyChars": 13411,
+    "boardSchemaValid": true
+  },
+  "tests": {
+    "passed": 184,
+    "skipped": 3,
+    "failed": 0
+  },
+  "limitations": [
+    "Concurrent clients use last-write-wins file saving",
+    "Undo history is local to the current board session",
+    "Copy/paste between items uses an in-app clipboard; board JSON is portable"
+  ]
+}

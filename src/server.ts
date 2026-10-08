@@ -1,3 +1,4 @@
+import { planApi } from './plan.ts'
 import { assistantEnv } from './env.ts'
 // Wednesday web server: the chat API, live events, and the built UI.
 import { serve } from '@hono/node-server'
@@ -155,6 +156,8 @@ export function createApp(opts: {
     c.header('Cache-Control', 'no-store')
     return c.json(await credits.read(cfg))
   })
+
+  app.route('/api/plan', planApi(cfg.dataDir))
 
   app.get('/api/healthz', (c) => c.json({ ok: true }))
 

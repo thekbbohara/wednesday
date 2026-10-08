@@ -8,6 +8,7 @@ export const PAGES = [
   { id: "tasks", label: "Tasks", icon: "M9.5 6.5h10M9.5 12h10M9.5 17.5h10M4.5 6.5l1 1 2-2M4.5 12l1 1 2-2M4.5 17.5l1 1 2-2" },
   { id: "memory", label: "Memory", icon: "M12 4.5c-4.4 0-7.5 1.3-7.5 3v9c0 1.7 3.1 3 7.5 3s7.5-1.3 7.5-3v-9c0-1.7-3.1-3-7.5-3ZM4.5 7.5c0 1.7 3.1 3 7.5 3s7.5-1.3 7.5-3M4.5 12c0 1.7 3.1 3 7.5 3s7.5-1.3 7.5-3" },
   { id: "credits", label: "Usage & credits", icon: "M4 6h16v12H4ZM4 9h16M15 14h2" },
+  { id: "plan", label: "Plan", icon: "M4 4h7v7H4ZM14 14h6v6h-6M14 7h6M7 14v6M11 7h3v10" },
   {
     id: "settings",
     label: "Settings",

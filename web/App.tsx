@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -11,6 +12,8 @@ import { CreditsPage } from "./Credits";
 import { ENGINES } from "../src/engines";
 import { Face, type Mood } from "./Face";
 import { buildRows, fullTime, splitCitations, type Row } from "./thread";
+
+const PlanPage = lazy(() => import("./Plan").then(m => ({ default: m.PlanPage })));
 
 const MAJORDOMO_COLOR = "#5cbdf4";
 const DRAFT_KEY = "majordomo:draft";
@@ -264,6 +267,7 @@ export function App() {
               <MemoryPage version={version} onRef={openRef} name={status.name} />
             </div>
           )}
+          {page === "plan" && <div className="page__view"><Suspense fallback={<PageHead title="Plan" />}><PlanPage onSend={send} version={version} /></Suspense></div>}
           {page === "credits" && <div className="page__view"><CreditsPage /></div>}
           {page === "settings" && (
             <div className="page__view">
