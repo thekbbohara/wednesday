@@ -1,3 +1,4 @@
+import { keysApi, type KeyStore } from './api-keys.ts'
 import { installedSkills } from './skills/installed.ts'
 import { planApi } from './plan.ts'
 import { assistantEnv } from './env.ts'
@@ -76,6 +77,8 @@ export function createApp(opts: {
   persistSettings?: boolean
   /** Inject read-only quota sources in tests without provider requests. */
   credits?: Pick<Credits, 'read'>
+  /** API key store; defaults to <secrets>/keys.json. */
+  keys?: KeyStore
 }) {
   const { mem, cfg, token, supervisor: sup } = opts
   // A single runner (tests/demo) is used for every provider; otherwise build per provider.
@@ -157,6 +160,8 @@ export function createApp(opts: {
     c.header('Cache-Control', 'no-store')
     return c.json(await credits.read(cfg))
   })
+
+  app.route('/api/keys', keysApi(opts.keys))
 
   app.route('/api/plan', planApi(cfg.dataDir))
 

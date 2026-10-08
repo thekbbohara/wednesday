@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { api, RUNTIME_COLOR, type ClaudeAccount, type ExpEvent, type Fact, type Hit, type Settings, type SkillView, type TaskRow } from "./api";
 import { Cited } from "./Cited";
+import { ApiKeys } from "./ApiKeys";
+import { Toggle } from "./Toggle";
 import { Face } from "./Face";
 import { Reply } from "./Reply";
 import { ExpBar, SkillIcon } from "./Skills";
@@ -498,6 +500,7 @@ export function SettingsPage({ name, onUsages }: { name: string; onUsages?: () =
               e.preventDefault(); onUsages();
             }}>View all runtime usage and credits <span aria-hidden="true">↗</span></a>
           </div>
+          <ApiKeys />
           <p className="micro">Captain</p>
           {row(
             "engine",
@@ -617,14 +620,6 @@ export function SettingsPage({ name, onUsages }: { name: string; onUsages?: () =
         </div>
       </div>
     </>
-  );
-}
-
-function Toggle({ id, on, onChange, label }: { id: string; on: boolean; onChange: (on: boolean) => void; label: string }) {
-  return (
-    <button id={id} role="switch" aria-checked={on} aria-label={label} className={`toggle${on ? " is-on" : ""}`} onClick={() => onChange(!on)}>
-      <span />
-    </button>
   );
 }
 
