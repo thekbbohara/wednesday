@@ -17,7 +17,7 @@ export const MAX_TTS_CHARS = 800
 export const TTS_MODELS = ['eleven_v4', 'eleven_v3']
 const SIMILARITY = 0.75
 /** eleven_v3 only accepts stability 0, 0.5 or 1 (Creative, Natural, Robust). */
-const stabilityFor = (model: string) => (model === 'eleven_v3' ? 0.5 : 0.38)
+const stabilityFor = (_model: string) => 0.5 // calmer, less breathy delivery (owner L3205: not seductive)
 
 /** A failure safe to show or log: never contains the key. */
 export class TtsError extends Error {}
