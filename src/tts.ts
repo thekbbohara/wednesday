@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { appendFileSync, chmodSync, copyFileSync, existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { execFile } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
@@ -8,7 +7,7 @@ import { promisify } from 'node:util'
 import { fileURLToPath } from 'node:url'
 import { Hono } from 'hono'
 import { KeyStore } from './api-keys.ts'
-import { assistantEnv } from './env.ts'
+import { dataDir } from './config.ts'
 
 const exec = promisify(execFile)
 const API = 'https://api.elevenlabs.io/v1'
@@ -22,7 +21,7 @@ const stabilityFor = (_model: string) => 0.5 // calmer, less breathy delivery (o
 /** A failure safe to show or log: never contains the key. */
 export class TtsError extends Error {}
 
-export const ttsCacheDir = () => join(assistantEnv('DATA_DIR') || join(homedir(), '.jarvis'), 'cache/tts')
+export const ttsCacheDir = () => join(dataDir(), 'cache/tts')
 
 export async function mp3ToOgg(mp3: string, ogg: string) {
   await exec('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-i', mp3, '-c:a', 'libopus', '-b:a', '48k', '-ac', '1', '-ar', '48000', '-application', 'voip', '-f', 'ogg', ogg], { timeout: 60_000 })

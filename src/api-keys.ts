@@ -1,12 +1,12 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { Hono } from 'hono'
 import { assistantEnv } from './env.ts'
+import { dataDir } from './config.ts'
 
-/** WEDNESDAY_SECRETS_DIR moves keys.json (tests, other installs). */
-export const secretDir = () => assistantEnv('SECRETS_DIR') || join(homedir(), '.jarvis/secrets')
+/** <data>/secrets; WEDNESDAY_SECRETS_DIR moves keys.json (tests, other installs). */
+export const secretDir = () => assistantEnv('SECRETS_DIR') || join(dataDir(), 'secrets')
 export const DEFAULT_VOICES = { wednesday: 'hdMatxlN8izOcIZg4lWv', owner: '3rO5MZtlLioktJaGDGLU' }
 export interface KeyData { keys: Record<string, string>; voices: typeof DEFAULT_VOICES; telegramVoice: boolean }
 /** A validation message that is safe to show: it never contains the submitted key. */

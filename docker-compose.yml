@@ -15,9 +15,11 @@ services:
       # a private address (e.g. your Tailscale IP) instead of 127.0.0.1.
       - ${WEDNESDAY_BIND:-${MAJORDOMO_BIND:-127.0.0.1}}:${WEDNESDAY_PORT:-${MAJORDOMO_PORT:-4788}}:4788
     # Host publication is configurable; the server listens on the fixed container port.
+    # Pinned here because these beat .env, where an empty key would override the image.
     environment:
       WEDNESDAY_BIND: 0.0.0.0
       WEDNESDAY_PORT: 4788
+      WEDNESDAY_DATA_DIR: /data
     env_file:
       - path: .env
         required: false

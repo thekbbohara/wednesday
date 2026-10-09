@@ -53,21 +53,40 @@ function num(name: string, fallback: number): number {
   return n
 }
 
-/** Keep existing memory directories in their historical precedence. Never move data. */
-export function defaultDataDir(home = homedir()): string {
-  for (const name of ['.majordomo', '.jarvis', '.wednesday']) {
-    const dir = join(home, name)
-    if (existsSync(dir)) return dir
+/** Legacy data folders, tried in order when ~/.wednesday does not exist. Never moved here. */
+const LEGACY_DATA_DIRS = ['.jarvis', '.majordomo']
+let warnedLegacy = false
+
+/**
+ * ~/.wednesday, unless only a legacy folder exists: then that folder is used and
+ * one warning per process points at scripts/migrate-data-dir.sh.
+ */
+export function defaultDataDir(home = homedir(), warn: (msg: string) => void = console.warn): string {
+  const dir = join(home, '.wednesday')
+  if (existsSync(dir)) return dir
+  for (const name of LEGACY_DATA_DIRS) {
+    const legacy = join(home, name)
+    if (!existsSync(legacy)) continue
+    if (!warnedLegacy) {
+      warnedLegacy = true
+      warn(`Using legacy data folder ${legacy}; ${dir} does not exist. Move it with scripts/migrate-data-dir.sh or set WEDNESDAY_DATA_DIR.`)
+    }
+    return legacy
   }
-  return join(home, '.wednesday')
+  return dir
+}
+
+/** WEDNESDAY_DATA_DIR (or MAJORDOMO_DATA_DIR) if set, else defaultDataDir(). Absolute. */
+export function dataDir(): string {
+  return resolve(assistantEnv('DATA_DIR') || defaultDataDir())
 }
 
 export function loadConfig(overrides: Partial<Config> = {}): Config {
-  const dataDir = resolve(assistantEnv('DATA_DIR') || defaultDataDir())
+  const dir = dataDir()
   const base: Config = {
     name: (env.ASSISTANT_NAME || 'Wednesday').trim() || 'Wednesday',
-    dataDir,
-    dbPath: join(dataDir, 'memory.db'),
+    dataDir: dir,
+    dbPath: join(dir, 'memory.db'),
     claudeBin: assistantEnv('CLAUDE_BIN') || 'claude',
     claudeConfigDir: expandHome(env.CLAUDE_CONFIG_DIR ?? ''),
     engine: 'claude',

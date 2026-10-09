@@ -20,7 +20,7 @@
     "mcp": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/mcp/server.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p web",
     "test": "NODE_OPTIONS=--disable-warning=ExperimentalWarning vitest run",
-    "test:live": "MAJORDOMO_LIVE=1 NODE_OPTIONS=--disable-warning=ExperimentalWarning vitest run test/live.test.ts --silent=false"
+    "test:live": "WEDNESDAY_LIVE=1 NODE_OPTIONS=--disable-warning=ExperimentalWarning vitest run test/live.test.ts --silent=false"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.3",

@@ -5,7 +5,7 @@ import { Hono } from 'hono'
 import { loadEnvFile } from 'node:process'
 import { resolve } from 'node:path'
 import { writeFileSync } from 'node:fs'
-import { loadConfig } from '../src/config.ts'
+import { defaultDataDir, loadConfig } from '../src/config.ts'
 import { assistantEnv } from '../src/env.ts'
 import { loadSettings, currentSettings } from '../src/settings.ts'
 import { createApp } from '../src/server.ts'
@@ -19,7 +19,7 @@ import type { ChatItem } from '../src/web/chat.ts'
 import type { Status } from '../src/server.ts'
 
 loadEnvFile('/home/kb26/kb/jarvis/.env')
-const cfg = loadConfig({ dataDir: '/home/kb26/.jarvis', name: 'Wednesday' })
+const cfg = loadConfig({ dataDir: defaultDataDir(), name: 'Wednesday' })
 loadSettings(cfg)
 const ownerToken = assistantEnv('TOKEN')
 async function liveGet(path: string) {

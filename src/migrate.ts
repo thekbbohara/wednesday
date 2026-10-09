@@ -1,6 +1,6 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning
 // Upgrades a Wednesday memory file to the current schema. Run by hand:
-//   node src/migrate.ts ~/.majordomo/memory.db
+//   node src/migrate.ts ~/.wednesday/memory.db
 // It copies the file to <file>.bak-v<old> first, then applies each step in one transaction.
 import { copyFileSync, existsSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'

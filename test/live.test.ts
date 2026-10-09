@@ -1,6 +1,6 @@
 // Live end-to-end test against the real Claude Code CLI. Costs a few cents.
 //   pnpm test:live                       (haiku by default)
-//   MAJORDOMO_LIVE_MODEL=sonnet pnpm test:live
+//   WEDNESDAY_LIVE_MODEL=sonnet pnpm test:live
 // The conversation tail is disabled, so after rotation the fresh session can
 // only know the project through Now, facts, tasks and the ledger.
 import { describe, expect, it } from 'vitest'
@@ -8,15 +8,16 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { loadConfig } from '../src/config.ts'
+import { assistantEnv } from '../src/env.ts'
 import { Memory } from '../src/memory/store.ts'
 import { Captain } from '../src/captain/captain.ts'
 import { ClaudeRunner } from '../src/captain/runner.ts'
 
-const live = process.env.MAJORDOMO_LIVE === '1'
+const live = assistantEnv('LIVE') === '1'
 
 describe.skipIf(!live)('live captain', () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'majordomo-live-'))
-  const cfg = loadConfig({ dataDir, model: process.env.MAJORDOMO_LIVE_MODEL || 'haiku', tailMessages: 0 })
+  const cfg = loadConfig({ dataDir, model: assistantEnv('LIVE_MODEL') || 'haiku', tailMessages: 0 })
   const mem = new Memory(cfg.dbPath)
   const captain = new Captain(mem, cfg, () => new ClaudeRunner({ bin: cfg.claudeBin, model: cfg.model, cwd: dataDir, allowedTools: cfg.allowedTools, timeoutSec: 300 }))
   const log = (who: string, r: { text: string; contextTokens: number; sessionId: string }) =>

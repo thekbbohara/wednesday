@@ -7,9 +7,9 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=simple
-WorkingDirectory=/home/kb26/.jarvis/worktrees/tggateway
-ExecStart=/home/kb26/.local/share/pi-node/node-v22.23.2-linux-x64/bin/node --env-file-if-exists=/home/kb26/kb/jarvis/.env --disable-warning=ExperimentalWarning /home/kb26/.jarvis/worktrees/tggateway/src/telegram/gateway.ts
-Environment="TELEGRAM_ENV_FILE=/home/kb26/.jarvis/work/eagle-eye/.env"
+WorkingDirectory=/home/kb26/.wednesday/worktrees/tggateway
+ExecStart=/home/kb26/.local/share/pi-node/node-v22.23.2-linux-x64/bin/node --env-file-if-exists=/home/kb26/kb/jarvis/.env --disable-warning=ExperimentalWarning /home/kb26/.wednesday/worktrees/tggateway/src/telegram/gateway.ts
+Environment="TELEGRAM_ENV_FILE=/home/kb26/.wednesday/work/eagle-eye/.env"
 Environment="TELEGRAM_WHISPER_PYTHON=/home/kb26/kb/clipcrew/.venv/bin/python"
 Environment="MAJORDOMO_URL=http://127.0.0.1:4788"
 Restart=always

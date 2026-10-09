@@ -3,6 +3,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { loadConfig } from '../src/config.ts'
+import { assistantEnv } from '../src/env.ts'
 import { Memory } from '../src/memory/store.ts'
 import { chatPage } from '../src/web/chat.ts'
 import { ClaudeSleepModel, runSleep, sleepInput, validate, type SleepModel, type SleepOps } from '../src/sleep/sleep.ts'
@@ -206,10 +207,10 @@ describe('schedule', () => {
 })
 
 // Real haiku on a seeded day: a contradiction, a duplicate, a new durable fact, chit-chat.
-describe.skipIf(process.env.MAJORDOMO_LIVE !== '1')('live sleep', () => {
+describe.skipIf(assistantEnv('LIVE') !== '1')('live sleep', () => {
   it('supersedes the changed fact, merges the duplicate, adds the new one, and invents nothing', { timeout: 300_000 }, async () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'majordomo-sleep-live-'))
-    const cfg = loadConfig({ dataDir, sleepModel: process.env.MAJORDOMO_LIVE_MODEL || 'haiku' })
+    const cfg = loadConfig({ dataDir, sleepModel: assistantEnv('LIVE_MODEL') || 'haiku' })
     const { mem, at } = clocked()
     const city = mem.factWrite({ kind: 'owner', subject: 'owner city', body: 'The owner lives in Pokhara.', source: 'owner' })
     const short1 = mem.factWrite({ kind: 'preference', subject: 'reply length', body: 'The owner wants short replies.', source: 'owner' })
