@@ -38,7 +38,7 @@ describe('Speech', () => {
     expect(statSync(path).mode & 0o777).toBe(0o600)
     const tts = calls.find((c) => c.url.includes('/text-to-speech/'))!
     expect(tts.url).toContain('/text-to-speech/hdMatxlN8izOcIZg4lWv?')
-    expect(tts.body).toEqual({ text: '[whispers] Hello there.', model_id: 'eleven_v4', voice_settings: { stability: 0.38, similarity_boost: 0.75 } })
+    expect(tts.body).toEqual({ text: '[whispers] Hello there.', model_id: 'eleven_v4', voice_settings: { stability: 0.5, similarity_boost: 0.75 } })
     expect(await speech.speak('[whispers] Hello there.')).toBe(path)
     expect(calls.filter((c) => c.url.includes('/text-to-speech/'))).toHaveLength(1)
     expect(calls.filter((c) => c.url.endsWith('/models'))).toHaveLength(1)
