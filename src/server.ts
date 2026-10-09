@@ -27,6 +27,7 @@ import { EXP_RULES, OVERALL_SCALE, progress, type Progress } from './skills/leve
 import { startSleepSchedule } from './sleep/schedule.ts'
 import { isUsageCommand, validUsageCommand, usageReport } from './credits-command.ts'
 import { Credits } from './credits.ts'
+import { readSystem } from './system.ts'
 import { claudeAccount } from './claude-account.ts'
 
 export interface Agent {
@@ -162,6 +163,12 @@ export function createApp(opts: {
   app.get('/api/credits', async (c) => {
     c.header('Cache-Control', 'no-store')
     return c.json(await credits.read(cfg))
+  })
+
+  // This PC's live health (read-only) for the Usages page.
+  app.get('/api/system', async (c) => {
+    c.header('Cache-Control', 'no-store')
+    return c.json(await readSystem())
   })
 
   const keys = opts.keys ?? new KeyStore()

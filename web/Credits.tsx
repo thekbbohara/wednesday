@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { PageHead } from "./pages";
+import { SystemPanel } from "./System";
 import type { CreditAccount } from "../src/credits-types";
 
 export function CreditsPage() {
@@ -27,6 +28,8 @@ export function CreditsPage() {
   return <>
     <PageHead title="Runtime usage and credits"><button className="credits-refresh" disabled={loading} onClick={() => setVersion(v => v + 1)}>{loading ? "Checking…" : "Refresh"}</button></PageHead>
     <div className="page__body">
+      <SystemPanel />
+      <h3 className="micro credits-label">Runtime credits</h3>
       <p className="credits-intro">Account allowances reported by providers. Each window has its own limit. Checks are cached for 60 seconds.</p>
       {error && <p className="credits-error" role="alert">{error} {accounts.length > 0 && "Previously loaded results are shown below."}</p>}
       {accounts.length > 0 && <p className="credits-summary">{accounts.filter(a => a.status === "available").length} reporting · {accounts.filter(a => a.status === "unavailable").length} unavailable{accounts.some(a => a.status === "stale") ? ` · ${accounts.filter(a => a.status === "stale").length} stale` : ""}</p>}
