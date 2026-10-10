@@ -1,5 +1,4 @@
 import { serve } from '@hono/node-server'
-import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -106,7 +105,10 @@ describe('agy captain selection', () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'wednesday-http-'))
     const cfg = loadConfig({ dataDir, engine: 'codex' })
     const calls: TurnRequest[] = []
-    const { app, captain, close } = createApp({ mem, cfg, token: 'isolated-token', webRoot: resolve('dist'), runnerFor: () => ({ run: async req => { calls.push(req); return success } }) })
+    // Its own web root: dist/ is a build output and missing in a fresh checkout.
+    const webRoot = mkdtempSync(join(tmpdir(), 'wednesday-web-'))
+    writeFileSync(join(webRoot, 'index.html'), '<!doctype html><title>Wednesday</title>')
+    const { app, captain, close } = createApp({ mem, cfg, token: 'isolated-token', webRoot, runnerFor: () => ({ run: async req => { calls.push(req); return success } }) })
     const http = serve({ fetch: app.fetch, hostname: '127.0.0.1', port: 0 })
     await new Promise<void>(r => { if (http.listening) r(); else http.once('listening', r) })
     const address = http.address() as { port: number }
