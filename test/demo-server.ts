@@ -1,7 +1,7 @@
 // UI development and browser checks without spending tokens: the real server
 // and agent supervisor, with a scripted captain and scripted agents.
 //   MAJORDOMO_DATA_DIR=/tmp/majordomo-demo node test/demo-server.ts
-// In the chat: "remember ..." writes memory, "fail" fails a turn,
+// In the chat: "remember ..." writes memory, "fail" fails a turn, "show <paths>" echoes them (media check),
 // "spawn <name>" starts a fake agent, "ask <name>" starts one that shows a menu.
 import { serve } from '@hono/node-server'
 import { mkdirSync, writeFileSync } from 'node:fs'
@@ -42,6 +42,11 @@ class DemoRunner implements Runner {
       const [, agent, event] = events.at(-1)!
       return event === 'report' && Math.random() < 0.5 ? ok('NOTHING_TO_REPORT') : ok(`${agent} sent a ${event}; I checked it and it looks fine.`)
     }
+    // "show <text with file paths>" replies with that text, so the chat renders the files.
+    const show = /^show ([\s\S]+)/i.exec(last)
+    if (show) return ok(show[1])
+    const saved = [...last.matchAll(/Saved at (\/\S+)\)/g)].map((m) => m[1])
+    if (saved.length) return ok(`Got ${saved.length === 1 ? 'it' : `all ${saved.length}`}, saved in the inbox.`)
     if (/fail/i.test(last)) return { ...ok('claude exited 1: API overloaded, try again'), isError: true }
     const spawn = /^(spawn|ask) ([a-z][a-z0-9-]*)/i.exec(last)
     if (spawn) {

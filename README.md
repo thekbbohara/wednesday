@@ -105,6 +105,8 @@ writes `<data>/settings.json`, which wins over the env. Everything else is in
 | `WEDNESDAY_SLEEP_AT` | `04:00` | Nightly sleep; empty turns it off |
 | `WEDNESDAY_EXTRACT_EVERY` / `_MINUTES` | `30` / `60` | Quick fact pass: after this many entries, or when the oldest is this old; `0` = off |
 | `WEDNESDAY_EMBED_MODEL` | `Xenova/all-MiniLM-L6-v2` | Meaning search model; `off` = keywords only |
+| `WEDNESDAY_MEDIA_ROOTS` | home + data dir | Where chat messages may show files from (colon separated) |
+| `WEDNESDAY_UPLOAD_MAX_MB` | `8192` | Largest chat upload; files stream to `<data>/inbox/web` |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude account for every Claude run |
 
 - **Engines**: `/engine codex gpt-5` or the selector in the chat. Codex runs
