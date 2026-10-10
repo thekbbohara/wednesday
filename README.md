@@ -14,7 +14,12 @@ crew of coding agents that run on their own.
   its own git worktree and tmux session, supervised with zero tokens.
 - **Fallback chain**: on a usage limit, switch to another Claude account, Codex
   or Kimi, and come back later.
-- **Nightly sleep**: consolidates the day into facts and a digest.
+- **Nightly sleep**: consolidates the day into facts and a digest; a quick pass
+  pulls facts out of the conversation about every hour in between.
+- **Search by meaning**: a small local CPU embedding model (no API) fused with
+  keyword search, so "crash" also finds "freeze".
+- **Project pages**: one short living summary per project, citing its facts,
+  tasks and messages, loaded when a message is about that project.
 - **Skills and EXP**, OSINT and design playbooks, voice replies (ElevenLabs).
 - Web UI, terminal chat, Docker.
 
@@ -42,6 +47,9 @@ pnpm start              # http://127.0.0.1:4788
 | `pnpm dev` | UI hot reload on :5788, API on :4788 |
 | `WEDNESDAY_DATA_DIR=/tmp/wed-demo node test/demo-server.ts` | Scripted captain and fake agents, no tokens |
 | `node src/sleep.ts [--dry-run]` | Run the nightly sleep now |
+| `node src/sleep.ts --extract` | Run the quick fact pass now (facts and pages, no digest) |
+| `nice -n 19 ionice -c 3 node src/memory/embed-index.ts` | Build or catch up the meaning index (the server also does it, niced) |
+| `node src/pages.ts list \| show <slug> \| seed <slug> "<title>" "kw1,kw2"` | Project pages; `seed` writes a first version from memory |
 | `pnpm mcp` | Memory MCP server alone (needs `WEDNESDAY_DB`) |
 
 Chat commands: `/engine [claude\|codex\|kimi\|agy] [model]`, `/now`, `/tasks`,
@@ -67,7 +75,10 @@ docker compose exec wednesday tmux -L majordomo attach -t majordomo_<name>   # w
 ## Data folder
 
 Everything lives in `~/.wednesday`: `memory.db`, `settings.json`, `secrets/`,
-`runtimes.json`, `skills.json` and agent `worktrees/`.
+`runtimes.json`, `skills.json` and agent `worktrees/`. Beside `memory.db`:
+`memory-pages.db` (project pages, back it up with memory.db), `memory-vec.db`
+(meaning index, a cache: delete it to rebuild) and `models/` (the embedding
+model, ~35 MB, downloaded once).
 
 - `WEDNESDAY_DATA_DIR` overrides it.
 - If `~/.wednesday` is missing but a legacy `~/.jarvis` exists, that is used,
@@ -92,6 +103,8 @@ writes `<data>/settings.json`, which wins over the env. Everything else is in
 | `WEDNESDAY_TOKEN` | none | Web chat secret |
 | `WEDNESDAY_BIND` / `WEDNESDAY_PORT` | `127.0.0.1` / `4788` | Listen address |
 | `WEDNESDAY_SLEEP_AT` | `04:00` | Nightly sleep; empty turns it off |
+| `WEDNESDAY_EXTRACT_EVERY` / `_MINUTES` | `30` / `60` | Quick fact pass: after this many entries, or when the oldest is this old; `0` = off |
+| `WEDNESDAY_EMBED_MODEL` | `Xenova/bge-small-en-v1.5` | Meaning search model; `off` = keywords only |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude account for every Claude run |
 
 - **Engines**: `/engine codex gpt-5` or the selector in the chat. Codex runs
@@ -118,15 +131,16 @@ wakes the captain only on `report`, `needs`, `exit` or `error`.
 ## How it works
 
 ```
-message -> ledger -> prompt [Now + tasks + tail + recalled facts] -> claude -p --resume
+message -> ledger -> prompt [Now + tasks + tail + project pages + recalled facts] -> claude -p --resume
         -> reply -> ledger -> rotate at 40% context | task closed | turn cap | /rotate
 ```
 
 - `src/memory/store.ts`: SQLite (`node:sqlite`, FTS5). Ledger, facts, tasks,
-  Now, sessions, agents.
+  Now, sessions, agents. `src/memory/vectors.ts`: local embeddings and RRF
+  fusion with FTS5. `src/memory/pages.ts`: project pages.
 - `src/mcp/server.ts`: memory and agent tools for the captain.
 - `src/captain/`: turn loop, engines, fallback chain. `src/agents/`: supervisor,
-  tmux, worktrees. `src/sleep/`: nightly consolidation. `web/`: React UI (`DESIGN.md`).
+  tmux, worktrees. `src/sleep/`: nightly consolidation and the quick fact pass. `web/`: React UI (`DESIGN.md`).
 
 ## Tests
 
