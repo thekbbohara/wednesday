@@ -8,7 +8,7 @@ import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
-import { existsSync } from 'node:fs'
+import { existsSync, unlinkSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadConfig, sidecars, type Config } from './config.ts'
@@ -17,7 +17,8 @@ import { Captain } from './captain/captain.ts'
 import type { Runner } from './captain/runner.ts'
 import { buildRunner } from './captain/chain.ts'
 import type { Provider } from './captain/provider.ts'
-import { chatPage, describeRef, promptOf, toChatItem, type ChatItem } from './web/chat.ts'
+import { chatPage, describeRef, promptOf, toChatItem, withMedia, type ChatItem } from './web/chat.ts'
+import { inboxFile, MediaError, mediaResponse, MediaRoots, saveUpload, uploadNote, UploadError, webInbox, type MediaRef } from './web/media.ts'
 import { Supervisor, SupervisorError, type AgentView } from './agents/supervisor.ts'
 import type { LedgerEntry } from './memory/store.ts'
 import { ClaudeSleepModel } from './sleep/sleep.ts'
@@ -61,6 +62,7 @@ export interface Status {
 }
 
 const MAX_MESSAGE_CHARS = 20_000
+const MAX_ATTACHMENTS = 20
 
 export function createApp(opts: {
   mem: Memory
@@ -85,6 +87,10 @@ export function createApp(opts: {
   keys?: KeyStore
   /** Text-to-speech; defaults to ElevenLabs with <data>/cache/tts. */
   speech?: Speech
+  /** Folders the chat may show files from; defaults to the owner's home and the data dir. */
+  media?: MediaRoots
+  /** Largest upload in bytes; defaults to WEDNESDAY_UPLOAD_MAX_MB or 8 GB. */
+  maxUploadBytes?: number
 }) {
   const { mem, cfg, token, supervisor: sup } = opts
   // A single runner (tests/demo) is used for every provider; otherwise build per provider.
@@ -99,6 +105,10 @@ export function createApp(opts: {
     })
   }
   const lockPath = join(cfg.dataDir, 'captain.lock')
+  const media = opts.media ?? MediaRoots.forData(cfg.dataDir)
+  const inbox = webInbox(cfg.dataDir)
+  const maxUpload = opts.maxUploadBytes ?? (Number(assistantEnv('UPLOAD_MAX_MB')) || 8192) * 1024 * 1024
+  const show = (i: ChatItem | null): ChatItem | null => (i ? withMedia(i, media) : null)
 
   // Live events: one poller over the ledger (it also sees what the terminal and
   // the MCP server write), fanned out to every open chat.
@@ -131,7 +141,7 @@ export function createApp(opts: {
     const fresh = mem.ledgerSince(cursor)
     if (fresh.length) {
       cursor = fresh[fresh.length - 1].id
-      const items = fresh.map(toChatItem).filter((i): i is ChatItem => i !== null)
+      const items = fresh.map((e) => show(toChatItem(e))).filter((i): i is ChatItem => i !== null)
       if (items.length) for (const l of listeners) l('items', items)
     }
     const s = status()
@@ -184,15 +194,27 @@ export function createApp(opts: {
   app.get('/api/chat', (c) => {
     const before = c.req.query('before')
     const limit = Math.min(Math.max(Number(c.req.query('limit') ?? 40) || 40, 1), 200)
-    return c.json({ ...chatPage(mem, before ? Number(before) : null, limit), status: status() })
+    const page = chatPage(mem, before ? Number(before) : null, limit)
+    return c.json({ ...page, items: page.items.map((i) => show(i)!), status: status() })
   })
 
   app.post('/api/messages', async (c) => {
-    const body = (await c.req.json().catch(() => null)) as { text?: unknown } | null
-    const text = typeof body?.text === 'string' ? body.text.trim() : ''
-    if (!text) return c.json({ error: 'empty message' }, 400)
-    if (text.length > MAX_MESSAGE_CHARS) return c.json({ error: `message is over ${MAX_MESSAGE_CHARS} characters` }, 413)
+    const body = (await c.req.json().catch(() => null)) as { text?: unknown; attachments?: unknown } | null
+    const said = typeof body?.text === 'string' ? body.text.trim() : ''
+    const attachments = Array.isArray(body?.attachments) ? body.attachments : []
+    if (!said && !attachments.length) return c.json({ error: 'empty message' }, 400)
+    if (said.length > MAX_MESSAGE_CHARS) return c.json({ error: `message is over ${MAX_MESSAGE_CHARS} characters` }, 413)
+    if (attachments.length > MAX_ATTACHMENTS) return c.json({ error: `at most ${MAX_ATTACHMENTS} attachments per message` }, 413)
+    // Only files this chat uploaded can be attached; the captain gets their paths, as from Telegram.
+    const files = attachments.map((p) => inboxFile(inbox, p))
+    if (files.some((f) => !f)) return c.json({ error: 'attachment not found; upload it again' }, 400)
+    const text = [said, ...(files as string[]).map(uploadNote)].filter(Boolean).join('\n')
     const owner = captain.receive(text)
+    if (attachments.length) {
+      captain.enqueue(owner)
+      tick()
+      return c.json({ item: show(toChatItem(owner)) })
+    }
     if (isUsageCommand(text)) {
       let report = 'Usage: /usages (alias /usage).'
       if (validUsageCommand(text)) {
@@ -201,7 +223,7 @@ export function createApp(opts: {
       }
       const reply = mem.append('captain', report)
       tick()
-      return c.json({ item: toChatItem(owner), reply: toChatItem(reply) })
+      return c.json({ item: show(toChatItem(owner)), reply: show(toChatItem(reply)) })
     }
     try {
       const patch = parseEngineCommand(text)
@@ -212,7 +234,57 @@ export function createApp(opts: {
       } else captain.enqueue(owner)
     } catch (e) { mem.append('captain', (e as Error).message) }
     tick()
-    return c.json({ item: toChatItem(owner) })
+    return c.json({ item: show(toChatItem(owner)) })
+  })
+
+  // ---- files: uploads from the composer, local files shown in messages -------
+
+  // Files are the risky part: no other site may embed or post them, and without
+  // a token only a loopback address is served (a DNS rebinding page cannot be).
+  const filesGuard = async (c: import('hono').Context, next: () => Promise<void>) => {
+    const site = c.req.header('sec-fetch-site')
+    if (site === 'cross-site' || site === 'same-site') return c.json({ error: 'cross-site request refused' }, 403)
+    if (!token && !loopbackHost(c.req.header('host'))) return c.json({ error: 'set WEDNESDAY_TOKEN to reach files from another host' }, 403)
+    await next()
+  }
+  app.use('/api/uploads', filesGuard)
+  app.use('/api/media', filesGuard)
+
+  // One file per request, the raw bytes as the body: streamed to disk, so a
+  // multi-GB video never sits in memory, and the browser can show progress.
+  app.post('/api/uploads', async (c) => {
+    const name = c.req.query('name') ?? ''
+    const declared = Number(c.req.header('content-length') ?? NaN)
+    if (declared > maxUpload) return c.json({ error: `file is over ${Math.floor(maxUpload / 1024 / 1024)} MB` }, 413)
+    const body = c.req.raw.body
+    if (!body) return c.json({ error: 'empty upload' }, 400)
+    try {
+      const { path, size } = await saveUpload(inbox, name, body, maxUpload)
+      const [ref] = media.refs(`\`${path}\``)
+      return c.json({ file: ref ?? ({ path, name: path.split('/').pop()!, size, kind: 'file', mime: 'application/octet-stream' } satisfies MediaRef) })
+    } catch (e) {
+      const status = e instanceof UploadError ? e.status : 500
+      return c.json({ error: (e as Error).message }, status)
+    }
+  })
+
+  // Removing an attachment before sending deletes its upload; nothing else can be deleted here.
+  app.delete('/api/uploads', (c) => {
+    const real = inboxFile(inbox, c.req.query('path'))
+    if (!real) return c.json({ error: 'not an upload' }, 404)
+    unlinkSync(real)
+    return c.json({ ok: true })
+  })
+
+  // Read-only: one file under the allowed roots, with Range for seeking video.
+  app.on(['GET', 'HEAD'], '/api/media', (c) => {
+    try {
+      const { real, stat } = media.resolve(c.req.query('path') ?? '')
+      return mediaResponse(real, stat, { range: c.req.header('range'), ifNoneMatch: c.req.header('if-none-match'), download: c.req.query('download') === '1', head: c.req.method === 'HEAD' })
+    } catch (e) {
+      const status = e instanceof MediaError ? e.status : 500
+      return c.text(e instanceof MediaError ? e.message : 'could not read the file', status)
+    }
   })
 
   app.post('/api/retry', async (c) => {
@@ -442,6 +514,12 @@ export function createApp(opts: {
   }
 }
 
+/** localhost or an IP literal: names a rebinding attack cannot point elsewhere. */
+export function loopbackHost(host: string | undefined): boolean {
+  const name = (host ?? '').replace(/:\d+$/, '').replace(/^\[|\]$/g, '').toLowerCase()
+  return name === 'localhost' || name.endsWith('.localhost') || /^\d{1,3}(\.\d{1,3}){3}$/.test(name) || (name.includes(':') && /^[0-9a-f:.]+$/.test(name))
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const cfg = loadConfig()
   loadSettings(cfg)
@@ -462,5 +540,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const pages = new Pages(sidecars(cfg.dbPath).pages)
   startSleepSchedule(mem, cfg, sleepModel, console.log, pages)
   startExtractSchedule(mem, cfg, sleepModel, console.log, 60_000, pages)
-  serve({ fetch: app.fetch, hostname: host, port }, () => console.log(`${cfg.name} on http://${host}:${port} - memory ${cfg.dbPath} - model ${cfg.model} - sleep ${cfg.sleepAt || 'off'}`))
+  const server = serve({ fetch: app.fetch, hostname: host, port }, () => console.log(`${cfg.name} on http://${host}:${port} - memory ${cfg.dbPath} - model ${cfg.model} - sleep ${cfg.sleepAt || 'off'}`))
+  // Node ends any request after 5 minutes; a multi-GB upload from a phone takes longer. Headers still time out.
+  ;(server as import('node:http').Server).requestTimeout = 0
 }

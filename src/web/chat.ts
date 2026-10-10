@@ -6,9 +6,10 @@ import type { LedgerEntry, Memory } from '../memory/store.ts'
 import { Pages, type PageVersion } from '../memory/pages.ts'
 import { sidecars } from '../config.ts'
 import { SLEEP_SESSION, summaryLine } from '../sleep/sleep.ts'
+import { splitNotes, type MediaRef, type MediaRoots } from './media.ts'
 
 export type ChatItem =
-  | { type: 'owner' | 'captain'; id: number; ts: string; text: string }
+  | { type: 'owner' | 'captain'; id: number; ts: string; text: string; media?: MediaRef[] }
   | { type: 'receipt'; id: number; ts: string; verb: string; ref: string; label?: string }
   | { type: 'error'; id: number; ts: string; text: string }
   | { type: 'agent'; id: number; ts: string; agent: string; event: string; text: string; prompt?: string }
@@ -79,6 +80,23 @@ export function toChatItem(e: LedgerEntry): ChatItem | null {
     default:
       return null
   }
+}
+
+/**
+ * The local files a message names, to show inline. The web chat's own
+ * attachment notes ("(Web: I attached ... Saved at ...)") are for the captain;
+ * the owner sees the files instead, unless one is gone.
+ */
+export function withMedia(item: ChatItem, roots: MediaRoots): ChatItem {
+  if (item.type !== 'owner' && item.type !== 'captain') return item
+  const media = roots.refs(item.text)
+  let text = item.text
+  if (item.type === 'owner') {
+    const notes = splitNotes(text)
+    const shown = new Set(media.map((m) => m.path))
+    if (notes.paths.length && notes.paths.every((p) => shown.has(p))) text = notes.text
+  }
+  return media.length ? { ...item, text, media } : item
 }
 
 /** The one-line summary the chat shows; the full text is behind the ledger chip. */
