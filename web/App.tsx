@@ -1,9 +1,9 @@
 import { lazy, Suspense } from "react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api, mergeItems, RUNTIME_COLOR, type Agent, type AgentDetail, type ChatItem, type RefInfo, type SkillView, type Status } from "./api";
-import { ExpBar, SkillBody, SkillIcon } from "./Skills";
+import { SkillBody, SkillIcon } from "./Skills";
 import { Cited } from "./Cited";
 import { Nav, usePage } from "./Nav";
 import { Reply } from "./Reply";
@@ -12,12 +12,78 @@ import { CreditsPage } from "./Credits";
 import { ENGINES } from "../src/engines";
 import { Face, type Mood } from "./Face";
 import { buildRows, fullTime, splitCitations, type Row } from "./thread";
+import { useScramble } from "./useScramble";
+import { Hud, isBusy } from "./Hud";
+import { isWaiting, NeedsRail, RailsBanner, useRailData, WorkRail } from "./Rails";
 
 const PlanPage = lazy(() => import("./Plan").then(m => ({ default: m.PlanPage })));
 
 const MAJORDOMO_COLOR = "#5cbdf4";
 const DRAFT_KEY = "majordomo:draft";
+const RAILS_KEY = "majordomo:rails:v2";
+const RAILS_INLINE = "(min-width: 1400px)";
 const NEAR_BOTTOM = 80;
+
+/** Marks which edges of a scroller have content past them, so CSS can fade those edges. */
+function markEdges(el: HTMLElement) {
+  el.toggleAttribute("data-above", el.scrollTop > 1);
+  el.toggleAttribute("data-below", el.scrollHeight - el.clientHeight - el.scrollTop > 1);
+}
+
+/** null = auto: Needs you shows while anything waits, Crew live while anyone is busy. */
+interface RailsState {
+  left: boolean | null;
+  right: boolean | null;
+  lw: number;
+  rw: number;
+}
+
+const RAILS_DEFAULT: RailsState = { left: null, right: null, lw: 300, rw: 280 };
+
+function loadRails(): RailsState {
+  try {
+    const stored = localStorage.getItem(RAILS_KEY);
+    return stored ? { ...RAILS_DEFAULT, ...JSON.parse(stored) } : RAILS_DEFAULT;
+  } catch {
+    return RAILS_DEFAULT;
+  }
+}
+
+/** The breakpoint where the side rails sit beside the thread; below it they fold into a banner. */
+function useWideRails(): boolean {
+  const [wide, setWide] = useState(() => matchMedia(RAILS_INLINE).matches);
+  useEffect(() => {
+    const mq = matchMedia(RAILS_INLINE);
+    const on = () => setWide(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return wide;
+}
+
+/** Drag handle on an inline rail's inner edge; reports a new clamped width. */
+function RailResize({ side, width, onResize }: { side: "left" | "right"; width: number; onResize: (w: number) => void }) {
+  const [dragging, setDragging] = useState(false);
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = width;
+    setDragging(true);
+    const move = (ev: PointerEvent) => {
+      const d = ev.clientX - startX;
+      const next = Math.min(420, Math.max(220, startW + (side === "left" ? d : -d)));
+      onResize(next);
+    };
+    const up = () => {
+      setDragging(false);
+      removeEventListener("pointermove", move);
+      removeEventListener("pointerup", up);
+    };
+    addEventListener("pointermove", move);
+    addEventListener("pointerup", up);
+  };
+  return <div className={`rail-handle rail-handle--${side}${dragging ? " is-dragging" : ""}`} onPointerDown={onPointerDown} role="separator" aria-orientation="vertical" aria-label={`Resize ${side} rail`} />;
+}
 
 type Receipt = Extract<ChatItem, { type: "receipt" }>;
 
@@ -36,6 +102,8 @@ export function App() {
   const [loaded, setLoaded] = useState(false);
   const [popover, setPopover] = useState<PopoverTarget | null>(null);
   const [unseen, setUnseen] = useState(false);
+  const [rosterOpen, setRosterOpen] = useState(false);
+  const [dropOpen, setDropOpen] = useState(false);
 
   const scroller = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
@@ -107,6 +175,7 @@ export function App() {
     }
     if (atBottom.current) el.scrollTop = el.scrollHeight;
     else setUnseen(true);
+    markEdges(el);
   }, [rows, status.thinking, trailing.length]);
 
   // Keep the newest message in view when the viewport changes (rotation, on-screen keyboard, composer growing).
@@ -115,6 +184,7 @@ export function App() {
     if (!el) return;
     const ro = new ResizeObserver(() => {
       if (atBottom.current) el.scrollTop = el.scrollHeight;
+      markEdges(el);
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -137,6 +207,7 @@ export function App() {
   const onScroll = () => {
     const el = scroller.current!;
     atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM;
+    markEdges(el);
     if (atBottom.current) setUnseen(false);
     if (el.scrollTop < 240) void loadOlder();
     setPopover(null);
@@ -179,6 +250,26 @@ export function App() {
 
   const skillMap = useMemo(() => new Map(status.skills.map((s) => [s.id, s])), [status.skills]);
 
+  const rail = useRailData(version);
+
+  const railsWide = useWideRails();
+  const [rails, setRailsState] = useState<RailsState>(loadRails);
+  const setRails = (patch: Partial<RailsState>) =>
+    setRailsState((r) => {
+      const next = { ...r, ...patch };
+      localStorage.setItem(RAILS_KEY, JSON.stringify(next));
+      return next;
+    });
+  const busyCount = status.agents.filter(isBusy).length;
+  const waiting = useMemo(() => rail.tasks.filter(isWaiting), [rail.tasks]);
+  const showLeft = rails.left ?? waiting.length > 0;
+  const showRight = rails.right ?? busyCount > 0;
+  // A toggle pins its rail open or shut; it no longer follows the auto rule.
+  const toggleRail = (side: "left" | "right") => {
+    if (!railsWide) return setDropOpen((v) => !v);
+    setRails(side === "left" ? { left: !showLeft } : { right: !showRight });
+  };
+
   const colors = useMemo(() => new Map(status.agents.map((a) => [a.id, RUNTIME_COLOR[a.runtime] ?? OTHER_COLOR])), [status.agents]);
 
   const liveAgents = useMemo(() => new Map(status.agents.map((a) => [a.id, a])), [status.agents]);
@@ -209,48 +300,95 @@ export function App() {
         unread={unread}
       />
       <div className="main">
-        <section className="top">
-          <Portrait mood={mood} stateText={stateText} status={status} />
-          <Roster agents={status.agents} onAgent={openAgent} />
-        </section>
+        <Hud
+          mood={mood}
+          stateText={stateText}
+          status={status}
+          rosterOpen={rosterOpen}
+          onRoster={() => setRosterOpen((v) => !v)}
+          onAgent={openAgent}
+          onUsage={() => goPage("credits")}
+        />
+        {rosterOpen && (
+          <RosterSheet onClose={() => setRosterOpen(false)}>
+            <Roster agents={status.agents} onAgent={openAgent} />
+          </RosterSheet>
+        )}
 
         <section className="page">
           {/* The chat stays mounted on other pages, so its scroll and draft survive. */}
-          <div className="page__view" hidden={page !== "command"}>
-            <PageHead title="Command Center" />
-            <div className="thread" ref={scroller} onScroll={onScroll}>
-              <div className="thread__inner">
-                {hasMore && <div className="thread__more">Loading earlier messages</div>}
-                {loaded && !items.length && <Empty name={status.name} />}
-                {rows.map((row) => (
-                  <RowView
-                    key={row.key}
-                    row={row}
-                    onRef={openRef}
-                    colors={colors}
-                    skills={skillMap}
-                    onSkills={() => goPage("skills")}
-                    majordomoName={status.name}
-                    asking={asking}
-                    agents={liveAgents}
-                  />
-                ))}
-                {status.thinking && <Pending receipts={trailing} onRef={openRef} name={status.name} />}
-                {!status.thinking && trailing.length > 0 && <Receipts receipts={trailing} onRef={openRef} />}
-              </div>
-            </div>
-
-            <footer className="dock">
-              {unseen && (
-                <button className="dock__new" onClick={toBottom}>
-                  <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden>
-                    <path d="M12 5v14M5.5 12.5 12 19l6.5-6.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  New messages
+          <div className="page__view page__view--command" hidden={page !== "command"}>
+            <PageHead title="Command Center">
+              <div className="rail-toggles">
+                <button className={`rail-toggle${(railsWide ? showLeft : dropOpen) ? " is-on" : ""}`} onClick={() => toggleRail("left")} aria-pressed={railsWide ? showLeft : dropOpen} title="What waits on you, and the Now note">
+                  Needs you
+                  <span className={`rail-toggle__count${waiting.length ? " rail-toggle__count--amber" : ""}`}>{waiting.length}</span>
                 </button>
+                <button className={`rail-toggle${(railsWide ? showRight : dropOpen) ? " is-on" : ""}`} onClick={() => toggleRail("right")} aria-pressed={railsWide ? showRight : dropOpen} title="What the crew is doing right now">
+                  Crew live
+                  <span className={`rail-toggle__count${busyCount ? " rail-toggle__count--blue" : ""}`}>{busyCount}</span>
+                </button>
+              </div>
+            </PageHead>
+            <div
+              className={`command${railsWide && showLeft ? " has-left" : ""}${railsWide && showRight ? " has-right" : ""}`}
+              style={{ "--rail-l": `${rails.lw}px`, "--rail-r": `${rails.rw}px` } as CSSProperties}
+            >
+              {railsWide && showLeft && (
+                <>
+                  <NeedsRail memory={rail.memory} tasks={rail.tasks} skills={skillMap} onTasks={() => goPage("tasks")} onMemory={() => goPage("memory")} onClose={() => setRails({ left: false })} />
+                  <RailResize side="left" width={rails.lw} onResize={(w) => setRails({ lw: w })} />
+                </>
               )}
-              <Composer onSend={send} name={status.name} engine={status.engine} />
-            </footer>
+              <div className="command__col">
+                {!railsWide && <RailsBanner waiting={waiting} agents={status.agents} open={dropOpen} onToggle={() => setDropOpen((v) => !v)} />}
+                {!railsWide && dropOpen && (
+                  <RailsDrop onClose={() => setDropOpen(false)}>
+                    <NeedsRail memory={rail.memory} tasks={rail.tasks} skills={skillMap} onTasks={() => goPage("tasks")} onMemory={() => goPage("memory")} />
+                    <WorkRail agents={status.agents} tasks={rail.tasks} />
+                  </RailsDrop>
+                )}
+                <div className="thread" ref={scroller} onScroll={onScroll}>
+                  <div className="thread__inner">
+                    {hasMore && <div className="thread__more">Loading earlier messages</div>}
+                    {loaded && !items.length && <Empty name={status.name} />}
+                    {rows.map((row) => (
+                      <RowView
+                        key={row.key}
+                        row={row}
+                        onRef={openRef}
+                        colors={colors}
+                        skills={skillMap}
+                        onSkills={() => goPage("skills")}
+                        majordomoName={status.name}
+                        asking={asking}
+                        agents={liveAgents}
+                      />
+                    ))}
+                    {status.thinking && <Pending receipts={trailing} onRef={openRef} name={status.name} />}
+                    {!status.thinking && trailing.length > 0 && <Receipts receipts={trailing} onRef={openRef} />}
+                  </div>
+                </div>
+
+                <footer className="dock">
+                  {unseen && (
+                    <button className="dock__new" onClick={toBottom}>
+                      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden>
+                        <path d="M12 5v14M5.5 12.5 12 19l6.5-6.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      New messages
+                    </button>
+                  )}
+                  <Composer onSend={send} name={status.name} engine={status.engine} />
+                </footer>
+              </div>
+              {railsWide && showRight && (
+                <>
+                  <RailResize side="right" width={rails.rw} onResize={(w) => setRails({ rw: w })} />
+                  <WorkRail agents={status.agents} tasks={rail.tasks} onClose={() => setRails({ right: false })} />
+                </>
+              )}
+            </div>
           </div>
           {page === "skills" && (
             <div className="page__view">
@@ -305,31 +443,62 @@ type PopoverTarget =
 
 const OTHER_COLOR = "#8fb3c9";
 
-/** Wednesday's portrait: face, level and EXP, state. */
-function Portrait({ mood, stateText, status }: { mood: Mood; stateText: string; status: Status }) {
-  const narrow = useNarrow();
-  const now = useNow(30_000);
-  const j = status.majordomo;
+/** The full crew grid, dropped down from the HUD's Roster button. */
+function RosterSheet({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const key = (e: globalThis.KeyboardEvent) => e.key === "Escape" && onClose();
+    // Clicks in the agent popover it opened, or on the HUD toggles, are not "outside".
+    const click = (e: globalThis.MouseEvent) => {
+      const t = e.target as Element;
+      if (!box.current?.contains(t) && !t.closest(".popover, .hud__crew")) onClose();
+    };
+    addEventListener("keydown", key);
+    addEventListener("mousedown", click);
+    return () => {
+      removeEventListener("keydown", key);
+      removeEventListener("mousedown", click);
+    };
+  }, [onClose]);
+  // Hang under the HUD's crew block, kept inside the viewport.
+  const [pos, setPos] = useState<CSSProperties>({ visibility: "hidden" });
+  useLayoutEffect(() => {
+    const place = () => {
+      const anchor = document.querySelector(".hud__crew")?.getBoundingClientRect();
+      const w = box.current?.offsetWidth ?? 0;
+      if (!anchor) return;
+      setPos({ top: anchor.bottom + 18, left: Math.max(12, Math.min(anchor.left - 14, innerWidth - w - 12)) });
+    };
+    place();
+    addEventListener("resize", place);
+    return () => removeEventListener("resize", place);
+  }, []);
   return (
-    <div className="portrait">
-      {status.model && <span className="portrait__model">{status.model}</span>}
-      <Face id="majordomo" mood={mood} color={MAJORDOMO_COLOR} size={narrow ? 52 : 96} badge={false} />
-      <div className="portrait__info">
-        <h1 className="portrait__name">
-          {status.name} <span className="lv">Lv {j.level}</span>
-        </h1>
-        <ExpBar p={j} color="var(--blue)" />
-        <p className="portrait__exp">
-          {j.exp.toLocaleString("en-US")} / {j.next.toLocaleString("en-US")} exp
-        </p>
-        <div className="portrait__state">
-          <span className={`pill pill--${mood}`} aria-live="polite">
-            <i />
-            {stateText}
-          </span>
-          {status.lastReplyAt && <span className="portrait__active">Active {ago(status.lastReplyAt, now)}</span>}
-        </div>
-      </div>
+    <div className="roster-sheet" ref={box} style={pos} role="dialog" aria-label="Crew roster">
+      {children}
+    </div>
+  );
+}
+
+/** Narrow screens: the rails drop down over the thread from the banner. */
+function RailsDrop({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const key = (e: globalThis.KeyboardEvent) => e.key === "Escape" && onClose();
+    const click = (e: globalThis.MouseEvent) => {
+      const t = e.target as Element;
+      if (!box.current?.contains(t) && !t.closest(".popover, .rails-banner, .rail-toggles")) onClose();
+    };
+    addEventListener("keydown", key);
+    addEventListener("mousedown", click);
+    return () => {
+      removeEventListener("keydown", key);
+      removeEventListener("mousedown", click);
+    };
+  }, [onClose]);
+  return (
+    <div className="rails-drop" ref={box}>
+      {children}
     </div>
   );
 }
@@ -342,17 +511,30 @@ function Roster({ agents, onAgent }: { agents: Agent[]; onAgent: OnAgent }) {
   const narrow = useNarrow();
   const grid = useRef<HTMLDivElement>(null);
   const [columns, setColumns] = useState(7);
+  const [more, setMore] = useState(false);
   const [tip, setTip] = useState<{ id: string; left: number; top: number } | null>(null);
   useLayoutEffect(() => {
     const el = grid.current;
     if (!el) return;
-    const measure = () => setColumns(Math.max(1, Math.floor((el.clientWidth + GAP) / (TILE + GAP))));
+    const measure = () => {
+      setColumns(Math.max(1, Math.floor((el.clientWidth + GAP) / (TILE + GAP))));
+      setMore(el.scrollHeight > el.clientHeight + 1);
+    };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+  // Crew growth changes the scroll height without resizing the grid.
+  useLayoutEffect(() => {
+    const el = grid.current;
+    if (el) setMore(el.scrollHeight > el.clientHeight + 1);
+  }, [agents.length, columns]);
   const count = (m: Mood) => agents.filter((a) => a.state === m).length;
+  const nAgents = useScramble(agents.length);
+  const nWorking = useScramble(count("working"));
+  const nNeeds = useScramble(count("needs"));
+  const nError = useScramble(count("error"));
   // Phones show the crew as one scrolling row, without empty slots.
   const slots = narrow ? 0 : Math.max(columns * 2, Math.ceil((agents.length + 1) / columns) * columns) - agents.length;
   const show = (id: string) => (e: { currentTarget: HTMLElement }) => {
@@ -365,21 +547,21 @@ function Roster({ agents, onAgent }: { agents: Agent[]; onAgent: OnAgent }) {
       <header className="roster__head">
         <h2 className="roster__title">Crew</h2>
         <p className="roster__stats">
-          {agents.length} {agents.length === 1 ? "agent" : "agents"}
+          {nAgents} {agents.length === 1 ? "agent" : "agents"}
           <i>·</i>
-          <b className="c-mint">{count("working")}</b> working
+          <b className="c-mint">{nWorking}</b> working
           <i>·</i>
-          <b className="c-amber">{count("needs")}</b> {count("needs") === 1 ? "needs" : "need"} you
+          <b className="c-amber">{nNeeds}</b> {count("needs") === 1 ? "needs" : "need"} you
           {count("error") > 0 && (
             <>
               <i>·</i>
-              <b className="c-coral">{count("error")}</b> errored
+              <b className="c-coral">{nError}</b> errored
             </>
           )}
         </p>
       </header>
       {narrow && !agents.length ? null : (
-      <div className="roster__grid" ref={grid} role="list" aria-label="Agents" onScroll={() => setTip(null)}>
+      <div className={`roster__grid${more ? " roster__grid--more" : ""}`} ref={grid} role="list" aria-label="Agents" onScroll={() => setTip(null)}>
         {agents.map((a) => (
           <button
             key={a.id}
@@ -431,23 +613,6 @@ function useNarrow(): boolean {
     return () => mq.removeEventListener("change", on);
   }, []);
   return narrow;
-}
-
-function useNow(everyMs: number): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), everyMs);
-    return () => clearInterval(t);
-  }, [everyMs]);
-  return now;
-}
-
-function ago(ts: string, now: number): string {
-  const s = Math.max(0, (now - new Date(ts).getTime()) / 1000);
-  if (s < 45) return "just now";
-  if (s < 3600) return `${Math.round(s / 60)}m ago`;
-  if (s < 86_400) return `${Math.round(s / 3600)}h ago`;
-  return `${Math.round(s / 86_400)}d ago`;
 }
 
 const MOOD_LABEL: Record<Mood, string> = { idle: "idle", working: "working", needs: "needs you", error: "error", offline: "offline" };
@@ -616,6 +781,7 @@ function ErrorNotice({ item, retryable, name }: { item: Extract<ChatItem, { type
   const [err, setErr] = useState("");
   return (
     <div className="notice" role="alert">
+      <i className="notice__dot" aria-hidden />
       <span className="notice__text">{name} couldn't reply: {firstLine(item.text)}</span>
       {retryable && (
         <button
@@ -648,9 +814,7 @@ function Pending({ receipts, onRef, name }: { receipts: Receipt[]; onRef: OnRef;
       </div>
       <div className="msg__body">
         <div className="bubble bubble--captain bubble--dots">
-          <i />
-          <i />
-          <i />
+          <span className="bubble__shimmer" />
         </div>
         {receipts.length > 0 && <Receipts receipts={receipts} onRef={onRef} />}
       </div>
@@ -1033,9 +1197,6 @@ function Composer({ onSend, name, engine }: { onSend: (text: string) => Promise<
 
   return (
     <div className="composer-wrap">
-      <label className="composer__engine">Engine <select aria-label="Captain engine" value={engine} onChange={(e) => { void onSend(`/engine ${e.target.value}`).catch((e) => setErr(e.message)); }}>
-        {ENGINES.map((value) => <option key={value} value={value}>{value}</option>)}
-      </select></label>
       {err && <p className="composer__err">{err}</p>}
       <form
         className="composer"
@@ -1044,6 +1205,16 @@ function Composer({ onSend, name, engine }: { onSend: (text: string) => Promise<
           void submit();
         }}
       >
+        <label className="composer__engine" title="Captain engine for the next message">
+          <i aria-hidden />
+          <select id="composer-engine" name="engine" aria-label="Captain engine" value={engine} onChange={(e) => void onSend(`/engine ${e.target.value}`).catch((err) => setErr((err as Error).message))}>
+            {ENGINES.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </label>
         <textarea
           ref={area}
           id="message"

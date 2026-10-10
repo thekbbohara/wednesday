@@ -481,7 +481,14 @@ export function SettingsPage({ name, onUsages }: { name: string; onUsages?: () =
       <div className="setting__control">
         {control}
         <span className={`setting__saved${saved === key ? " is-on" : ""}`} aria-live="polite">
-          {saved === key ? "Saved" : ""}
+          {saved === key && (
+            <>
+              <svg viewBox="0 0 24 24" width="11" height="11" aria-hidden>
+                <path d="M5 12.5 10 17.5 19 7" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Saved
+            </>
+          )}
         </span>
       </div>
     </div>
