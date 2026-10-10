@@ -58,6 +58,15 @@ describe('vector index', () => {
     expect(keys).toEqual(['F1', 'T1', 'L4', 'L5'])
   })
 
+  it('skips agent plumbing (started, stopped, menu answers) but keeps reports and messages', async () => {
+    const { mem, idx } = setup()
+    mem.append('agent', 'clipcrew2 stopped', { meta: { agent: 'clipcrew2', event: 'stop' } })
+    mem.append('agent', 'The owner answered x: yes', { meta: { agent: 'x', event: 'answer' } })
+    mem.append('agent', 'x reported: the pc froze during the render', { meta: { agent: 'x', event: 'report' } })
+    mem.append('agent', 'Wednesday to x: retry on the other disk', { meta: { agent: 'x', event: 'message' } })
+    expect(pendingDocs(mem, idx).docs.map((d) => d.key)).toEqual(['L3', 'L4'])
+  })
+
   it('splits long entries into windows that resolve to one ref', () => {
     const docs = ledgerDocs({ id: 9, ts: '', kind: 'agent', session: null, text: 'word '.repeat(1000), meta: null })
     expect(docs.length).toBeGreaterThan(1)
@@ -163,7 +172,7 @@ describe('hybrid search', () => {
     const dir = mkdtempSync(join(tmpdir(), 'wed-open-'))
     const mem = new Memory(join(dir, 'memory.db'))
     mem.append('owner', 'crash report')
-    const s = openSearch(mem, sidecars(mem.path), 'Xenova/bge-small-en-v1.5')
+    const s = openSearch(mem, sidecars(mem.path), 'Xenova/all-MiniLM-L6-v2')
     expect(s.index).toBeNull()
     expect((await s.search('crash')).map((h) => h.ref)).toEqual(['L1'])
     expect(openSearch(mem, sidecars(mem.path), '').index).toBeNull()

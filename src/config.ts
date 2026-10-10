@@ -53,7 +53,7 @@ const env = process.env
 
 /** Unset = the default model; "off" (or "none") = meaning search disabled. */
 function embedModel(v: string | undefined): string {
-  if (v === undefined || v.trim() === '') return 'Xenova/bge-small-en-v1.5'
+  if (v === undefined || v.trim() === '') return 'Xenova/all-MiniLM-L6-v2'
   return /^(off|none|false|0)$/i.test(v.trim()) ? '' : v.trim()
 }
 

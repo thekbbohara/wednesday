@@ -10,7 +10,13 @@ import { existsSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { Fact, Hit, LedgerEntry, LedgerKind, Memory, Task } from './store.ts'
 
-export const DEFAULT_EMBED_MODEL = 'Xenova/bge-small-en-v1.5'
+/**
+ * all-MiniLM-L6-v2: 23 MB, fast on CPU, and its similarities spread widely
+ * (unrelated text ~0.1, related 0.3+), so one floor separates them. bge-small
+ * ranked about as well but packed everything into 0.45-0.85, where unrelated
+ * queries could not be told from related ones on the real memory.
+ */
+export const DEFAULT_EMBED_MODEL = 'Xenova/all-MiniLM-L6-v2'
 /** bge models want this prefix on queries (not on documents). */
 const BGE_QUERY = 'Represent this sentence for searching relevant passages: '
 /** Ledger kinds worth finding by meaning. Now snapshots and rotations are noise. */
@@ -20,8 +26,16 @@ const CHUNK_CHARS = 1200
 const MAX_CHUNKS = 4
 /** RRF constant: the usual 60 keeps one list from dominating on rank 1 alone. */
 const RRF_K = 60
-/** Cosine floor for a vector-only hit, so an unrelated query still returns nothing. */
-export const MIN_SIMILARITY = 0.55
+/**
+ * Cosine floor for a vector hit, so an unrelated query still returns nothing.
+ * Measured on the live memory: for MiniLM, unrelated queries top out at 0.22-0.30.
+ */
+export function minSimilarity(model: string): number {
+  if (/bge/i.test(model)) return 0.62
+  return 0.3
+}
+/** Agent events that are only plumbing (started, stopped, answered a menu): nothing to find by meaning. */
+const PLUMBING_AGENT_EVENTS = new Set(['spawn', 'stop', 'exit', 'answer', 'auto'])
 
 export interface Embedder {
   /** Model id; a change rebuilds the index. */
@@ -136,10 +150,12 @@ function dot(a: Float32Array, b: Float32Array): number {
 export class VectorIndex {
   readonly db: DatabaseSync
   readonly path: string
+  readonly model: string
   private cache: { version: number; rows: { key: string; ref: string; kind: DocKind; v: Float32Array }[] } | null = null
 
   constructor(path: string, model: string) {
     this.path = path
+    this.model = model
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true })
     this.db = new DatabaseSync(path)
     this.db.exec(`PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;
@@ -207,7 +223,7 @@ export class VectorIndex {
   }
 
   /** Nearest documents by cosine (vectors are normalized), best first, one per ref. */
-  search(q: Float32Array, kind: DocKind, limit: number, keep: (ref: string) => boolean = () => true): { ref: string; sim: number }[] {
+  search(q: Float32Array, kind: DocKind, limit: number, keep: (ref: string) => boolean = () => true, floor = minSimilarity(this.model)): { ref: string; sim: number }[] {
     const best = new Map<string, number>()
     for (const r of this.rows()) {
       if (r.kind !== kind) continue
@@ -216,7 +232,7 @@ export class VectorIndex {
     }
     return [...best]
       .map(([ref, sim]) => ({ ref, sim }))
-      .filter((h) => h.sim >= MIN_SIMILARITY)
+      .filter((h) => h.sim >= floor)
       .sort((a, b) => b.sim - a.sim)
       .filter((h) => keep(h.ref))
       .slice(0, limit)
@@ -234,6 +250,11 @@ export class VectorIndex {
   }
 }
 
+export function embeddable(e: LedgerEntry): boolean {
+  if (!EMBED_LEDGER_KINDS.includes(e.kind) || !e.text.trim()) return false
+  return !(e.kind === 'agent' && PLUMBING_AGENT_EVENTS.has(String(e.meta?.event)))
+}
+
 /** Documents that are new or changed since they were last embedded. */
 export function pendingDocs(mem: Memory, idx: VectorIndex, maxLedger = Infinity): { docs: Doc[]; ledgerTo: number } {
   const docs: Doc[] = []
@@ -245,7 +266,7 @@ export function pendingDocs(mem: Memory, idx: VectorIndex, maxLedger = Infinity)
     for (const d of all) if (have.get(d.key) !== d.hash) docs.push(d)
   }
   const fresh = mem.ledgerSince(idx.ledgerCursor).slice(0, maxLedger === Infinity ? undefined : maxLedger)
-  for (const e of fresh) if (EMBED_LEDGER_KINDS.includes(e.kind) && e.text.trim()) docs.push(...ledgerDocs(e))
+  for (const e of fresh) if (embeddable(e)) docs.push(...ledgerDocs(e))
   return { docs, ledgerTo: fresh.at(-1)?.id ?? idx.ledgerCursor }
 }
 
