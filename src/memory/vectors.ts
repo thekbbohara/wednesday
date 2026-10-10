@@ -80,8 +80,12 @@ export class LocalEmbedder implements Embedder {
       return p as unknown as Extractor
     })()
     // A failed load is retried on the next call (the model may have been downloaded since).
-    this.loading.catch(() => (this.loading = null))
-    return this.loading
+    // This handler also marks the rejection as handled; callers get it through their own await.
+    const p = this.loading
+    p.catch(() => {
+      if (this.loading === p) this.loading = null
+    })
+    return p
   }
 
   /** Start loading in the background so the first search does not pay for it. */

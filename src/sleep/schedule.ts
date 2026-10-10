@@ -70,7 +70,7 @@ export function startExtractSchedule(mem: Memory, cfg: Config, model: SleepModel
       running = false
     }
   }
-  const timer = setInterval(() => void tick(), everyMs)
+  const timer = setInterval(() => void tick().catch((e) => log(`extract tick failed: ${(e as Error).message}`)), everyMs)
   return () => clearInterval(timer)
 }
 
@@ -93,7 +93,9 @@ export function startSleepSchedule(mem: Memory, cfg: Config, model: SleepModel, 
       running = false
     }
   }
-  const timer = setInterval(() => void tick(), 60_000)
-  void tick()
+  // Timer callbacks must never reject: an unhandled rejection would take the whole server down.
+  const safe = () => void tick().catch((e) => log(`sleep tick failed: ${(e as Error).message}`))
+  const timer = setInterval(safe, 60_000)
+  safe()
   return () => clearInterval(timer)
 }

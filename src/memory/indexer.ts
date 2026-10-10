@@ -26,7 +26,16 @@ export function deprioritize(pid: number): void {
 export function startIndexer(mem: Memory, cfg: Config, log = console.log, everyMs = 2 * 60_000): () => void {
   let running = false
   let retryAt = 0
+  // A timer callback that throws is an uncaught exception that would take the server down.
   const tick = () => {
+    try {
+      check()
+    } catch (e) {
+      retryAt = Date.now() + RETRY_MS
+      log(`embed: indexer check failed, keyword search still works, retrying in 30 min: ${(e as Error).message}`)
+    }
+  }
+  const check = () => {
     // cfg.embedModel is read each time, so turning it off applies without a restart.
     if (running || !cfg.embedModel || Date.now() < retryAt) return
     const paths = sidecars(cfg.dbPath)

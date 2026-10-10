@@ -2,7 +2,7 @@
 // "direct" questions share at least one content word with the fact (the normal
 // case: owners reuse their own nouns). "paraphrase" questions share none; they
 // measure where keyword recall stops and embeddings would be needed.
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { existsSync } from 'node:fs'
 import { Memory } from '../src/memory/store.ts'
 import { DEFAULT_EMBED_MODEL, HybridSearch, indexPending, LocalEmbedder, VectorIndex } from '../src/memory/vectors.ts'
@@ -119,14 +119,15 @@ describe('retrieval quality', () => {
 const MODELS = process.env.WEDNESDAY_LIVE_MODELS
 describe.skipIf(!MODELS || !existsSync(`${MODELS}/${DEFAULT_EMBED_MODEL}`))('retrieval quality, hybrid (real embedding model)', () => {
   const { mem, idOf } = seed()
-  const ready = (async () => {
+  // Built in beforeAll: a skipped describe still runs its body, so nothing may start loading here.
+  let search: HybridSearch
+  beforeAll(async () => {
     const idx = new VectorIndex(':memory:', DEFAULT_EMBED_MODEL)
     const emb = new LocalEmbedder({ cacheDir: MODELS!, download: false })
     await indexPending(mem, idx, emb)
-    return new HybridSearch(mem, idx, emb)
-  })()
+    search = new HybridSearch(mem, idx, emb)
+  }, 120_000)
   const rate = async (set: [string, string][], k: number) => {
-    const search = await ready
     const misses: string[] = []
     for (const [q, subject] of set) if (!(await search.searchFacts(q, k)).map((h) => h.ref).includes(idOf.get(subject)!)) misses.push(`${q} -> ${subject}`)
     return { rate: 1 - misses.length / set.length, misses }
