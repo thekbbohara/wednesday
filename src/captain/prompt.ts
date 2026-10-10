@@ -4,6 +4,7 @@
 import type { Config } from '../config.ts'
 import type { Hit, LedgerEntry, LedgerKind, Memory } from '../memory/store.ts'
 import { HybridSearch } from '../memory/vectors.ts'
+import { fmtPage, type Pages } from '../memory/pages.ts'
 
 export const CONVERSATION_KINDS: readonly LedgerKind[] = ['owner', 'captain', 'decision', 'agent']
 const RECALL_LEDGER_KINDS: readonly LedgerKind[] = ['owner', 'captain', 'decision', 'agent', 'task', 'fact', 'system']
@@ -37,6 +38,8 @@ export async function buildTurnPrompt(
   agents: string | null = null,
   /** Keyword + meaning search; keyword only when omitted. */
   search: HybridSearch = new HybridSearch(mem, null, null),
+  /** Project pages; the ones a message is about are loaded with it. */
+  pages: Pages | null = null,
 ): Promise<BuiltPrompt> {
   if (!inputs.length) throw new Error('a turn needs at least one input')
   const owner = inputs[0]
@@ -65,6 +68,18 @@ export async function buildTurnPrompt(
       for (const e of tail) view.seen.add(`L${e.id}`)
       parts.push(`<recent_conversation note="before this session; the owner saw all of it">\n${tail.map(fmtEntry).join('\n')}\n</recent_conversation>`)
     }
+  }
+
+  if (pages) {
+    const all = pages.list()
+    if (fresh && all.length) parts.push(`<project_pages note="read one with page_get">\n${all.map((p) => `${p.slug}: ${p.title}`).join('\n')}\n</project_pages>`)
+    // A page is shown again only when it changed since this session last saw it.
+    const about = pages.match(query).filter((p) => !view.seen.has(`P:${p.slug}@${p.version}`))
+    for (const p of about) {
+      view.seen.add(`P:${p.slug}@${p.version}`)
+      injected.push(`P:${p.slug}`)
+    }
+    if (about.length) parts.push(about.map(fmtPage).join('\n\n'))
   }
 
   const recalled: Hit[] = []

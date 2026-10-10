@@ -3,7 +3,8 @@
 //   node src/sleep.ts            consolidate everything since the last sleep
 //   node src/sleep.ts --dry-run  show what it would change, change nothing
 //   node src/sleep.ts --extract  the quick daytime pass: facts from what is new, no digest
-import { loadConfig } from './config.ts'
+import { loadConfig, sidecars } from './config.ts'
+import { Pages } from './memory/pages.ts'
 import { loadSettings } from './settings.ts'
 import { Memory } from './memory/store.ts'
 import { ClaudeSleepModel, summaryLine } from './sleep/sleep.ts'
@@ -14,13 +15,14 @@ const dryRun = process.argv.includes('--dry-run')
 const cfg = loadConfig()
 loadSettings(cfg)
 const mem = new Memory(cfg.dbPath, { nowBudgetChars: cfg.nowBudgetChars })
+const pages = new Pages(sidecars(cfg.dbPath).pages)
 const model = new ClaudeSleepModel({ bin: cfg.claudeBin, model: cfg.sleepModel, promptFile: cfg.sleepPromptFile, timeoutSec: cfg.turnTimeout, cwd: cfg.dataDir, name: cfg.name, configDir: cfg.claudeConfigDir })
 if (process.argv.includes('--extract')) {
-  console.log(extractLine(await runExtract(mem, model)))
+  console.log(extractLine(await runExtract(mem, model, { pages })))
   mem.close()
   process.exit(0)
 }
-const r = await sleepNow(mem, cfg, model, { dryRun })
+const r = await sleepNow(mem, cfg, model, { dryRun, pages })
 if (!r.days.length) console.log('Nothing new since the last sleep.')
 for (const d of r.days) {
   console.log(`${d.date} (L${d.from}-L${d.to}): ${summaryLine(d)}${dryRun ? ' [dry run, nothing applied]' : ''}`)

@@ -12,6 +12,7 @@ import { ENGINES } from '../engines.ts'
 import { addSkill, DEFAULT_SKILLS, loadSkills, type Skill } from '../skills/skills.ts'
 import { FACT_KINDS, Memory, TASK_STATUSES, type Hit } from '../memory/store.ts'
 import { HybridSearch, openSearch } from '../memory/vectors.ts'
+import { fmtPage, PAGE_BUDGET, Pages } from '../memory/pages.ts'
 import { loadConfig as config, sidecars } from '../config.ts'
 
 export interface AgentApi {
@@ -26,6 +27,7 @@ export function buildServer(
   skills: Skill[] = DEFAULT_SKILLS,
   skillsDir?: string,
   search: HybridSearch = new HybridSearch(mem, null, null),
+  pages: Pages | null = null,
 ): McpServer {
   // Checked against the live list, so a skill added this turn can be used right away.
   const liveIds = () => (skillsDir ? loadSkills(skillsDir) : skills).map((s) => s.id)
@@ -132,6 +134,58 @@ export function buildServer(
     guard(() => {
       const n = mem.nowGet()
       return n.version ? `Now v${n.version} (${n.updated_at}):\n${n.text}` : 'Now is empty.'
+    }),
+  )
+
+  const needPages = () => {
+    if (!pages) throw new Error('project pages are not available here')
+    return pages
+  }
+
+  server.registerTool(
+    'page_list',
+    { description: 'List the project pages: slug, title, keywords, version and last update.', inputSchema: {} },
+    guard(() => {
+      const all = needPages().list()
+      return all.length
+        ? all.map((p) => `${p.slug} v${p.version} (${p.updated_at.slice(0, 10)}) ${p.title} [${p.keywords.join(', ')}] ${p.body.length}/${PAGE_BUDGET} chars`).join('\n')
+        : 'No project pages yet. Create one with page_update.'
+    }),
+  )
+
+  server.registerTool(
+    'page_get',
+    {
+      description: 'Read a project page: the living summary of one project, with the F/T/L ids it rests on. history=true adds its recent versions.',
+      inputSchema: { slug: z.string().min(1), history: z.boolean().default(false) },
+    },
+    guard(({ slug, history }) => {
+      const p = needPages().get(slug)
+      if (!p) return `No page "${slug}". Pages: ${needPages().list().map((x) => x.slug).join(', ') || '(none)'}`
+      const h = history ? `\n\nVersions:\n${needPages().history(p.slug).map((v) => `v${v.version} ${v.ts.slice(0, 16)} ${v.by ?? ''}: ${v.note}`).join('\n')}` : ''
+      return `${fmtPage(p)}\nkeywords: ${p.keywords.join(', ')}${h}`
+    }),
+  )
+
+  server.registerTool(
+    'page_update',
+    {
+      description:
+        'Create or rewrite a project page (one per project, e.g. clipcrew, pc-health, wednesday). The body is the whole page: ' +
+        'what it is, where it lives, current state, open work by T id, decisions with reasons, what waits on the owner. ' +
+        `Cite the ids it rests on, like [F12] [T3] [L120]; every id must exist. Max ${PAGE_BUDGET} chars: summarize, detail stays in facts and the ledger. ` +
+        'Read the page first and keep what is still true.',
+      inputSchema: {
+        slug: z.string().min(2).max(40).describe('Lowercase id, e.g. "clipcrew" or "pc-health".'),
+        body: z.string().min(1),
+        title: z.string().max(80).optional().describe('Needed when creating the page.'),
+        keywords: z.array(z.string().min(2)).max(12).optional().describe('Words that mean a message is about this project (needed when creating). Messages that contain one get the page loaded.'),
+        note: z.string().max(200).optional().describe('What changed, in a few words.'),
+      },
+    },
+    guard(({ slug, body, title, keywords, note }) => {
+      const p = needPages().update(mem, slug, { body, title, keywords, note }, session)
+      return `Page ${p.slug} is v${p.version} (${p.body.length}/${PAGE_BUDGET} chars).`
     }),
   )
 
@@ -341,6 +395,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const mem = new Memory(db)
   const url = assistantEnv('URL')
   const search = openSearch(mem, sidecars(db), config().embedModel, (s) => console.error(s))
-  const server = buildServer(mem, assistantEnv('SESSION') || null, url ? { url, token: assistantEnv('TOKEN') || undefined } : null, loadSkills(dirname(db)), dirname(db), search)
+  // A broken pages sidecar must not take the memory tools down with it.
+  let pages: Pages | null = null
+  try {
+    pages = new Pages(sidecars(db).pages)
+  } catch (e) {
+    console.error(`project pages unavailable: ${(e as Error).message}`)
+  }
+  const server = buildServer(mem, assistantEnv('SESSION') || null, url ? { url, token: assistantEnv('TOKEN') || undefined } : null, loadSkills(dirname(db)), dirname(db), search, pages)
   await server.connect(new StdioServerTransport())
 }

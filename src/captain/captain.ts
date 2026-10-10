@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { sidecars, type Config } from '../config.ts'
 import { CLOSED_STATUSES, type LedgerEntry, type Memory, type TaskStatus } from '../memory/store.ts'
 import { HybridSearch, openSearch } from '../memory/vectors.ts'
+import { Pages } from '../memory/pages.ts'
 import { withFileLock } from './lock.ts'
 import { loadSettings } from '../settings.ts'
 import { plainDash } from '../text.ts'
@@ -43,6 +44,8 @@ export class Captain {
   private lockPath: string
   private search: HybridSearch | null = null
   private searchAt = 0
+  private pagesStore: Pages | null = null
+  private pagesFailed = false
   private chain: Promise<unknown> = Promise.resolve()
   private pending: LedgerEntry[] = []
   private draining = false
@@ -121,6 +124,18 @@ export class Captain {
       this.searchAt = Date.now()
     }
     return this.search ?? new HybridSearch(this.mem, null, null)
+  }
+
+  /** Project pages; a sidecar that cannot be opened means a turn without pages, never a failed turn. */
+  private pages(): Pages | null {
+    if (this.mem.path === ':memory:' || this.pagesFailed) return null
+    try {
+      this.pagesStore ??= new Pages(sidecars(this.mem.path).pages)
+    } catch (e) {
+      this.pagesFailed = true
+      console.log(`project pages unavailable: ${(e as Error).message}`)
+    }
+    return this.pagesStore
   }
 
   private systemPrompt(): string {
@@ -245,14 +260,14 @@ export class Captain {
       const runner = this.runnerOf(provider)
 
       let s = this.session()
-      let prompt = await buildTurnPrompt(this.mem, this.cfg, inputs, this.view, s.id, this.agents?.summary() ?? null, this.searcher())
+      let prompt = await buildTurnPrompt(this.mem, this.cfg, inputs, this.view, s.id, this.agents?.summary() ?? null, this.searcher(), this.pages())
       let res = await this.call(runner, s.id, !s.fresh, prompt.text)
 
       if (res.isError && res.sessionMissing) {
         this.mem.append('system', `Captain session ${s.id} is gone (${res.text}); starting fresh`, { session: s.id })
         this.mem.sessionEnd(s.id, 'missing')
         s = this.session()
-        prompt = await buildTurnPrompt(this.mem, this.cfg, inputs, this.view, s.id, this.agents?.summary() ?? null, this.searcher())
+        prompt = await buildTurnPrompt(this.mem, this.cfg, inputs, this.view, s.id, this.agents?.summary() ?? null, this.searcher(), this.pages())
         res = await this.call(runner, s.id, false, prompt.text)
       }
 

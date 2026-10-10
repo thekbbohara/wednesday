@@ -11,7 +11,7 @@ import { streamSSE } from 'hono/streaming'
 import { existsSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { loadConfig, type Config } from './config.ts'
+import { loadConfig, sidecars, type Config } from './config.ts'
 import { Memory } from './memory/store.ts'
 import { Captain } from './captain/captain.ts'
 import type { Runner } from './captain/runner.ts'
@@ -26,6 +26,7 @@ import { apply, check, parseEngineCommand, currentSettings, loadSettings, MODELS
 import { EXP_RULES, OVERALL_SCALE, progress, type Progress } from './skills/levels.ts'
 import { startExtractSchedule, startSleepSchedule } from './sleep/schedule.ts'
 import { startIndexer } from './memory/indexer.ts'
+import { Pages } from './memory/pages.ts'
 import { isUsageCommand, validUsageCommand, usageReport } from './credits-command.ts'
 import { Credits } from './credits.ts'
 import { readSystem } from './system.ts'
@@ -458,7 +459,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { app } = createApp({ mem, cfg, runnerFor: (p) => buildRunner(p, cfg), token, supervisor, selfUrl, persistSettings: true, webRoot: resolve(import.meta.dirname, '../dist') })
   startIndexer(mem, cfg)
   const sleepModel = new ClaudeSleepModel({ bin: cfg.claudeBin, model: () => cfg.sleepModel, promptFile: cfg.sleepPromptFile, timeoutSec: cfg.turnTimeout, cwd: cfg.dataDir, name: cfg.name, configDir: () => cfg.claudeConfigDir })
-  startSleepSchedule(mem, cfg, sleepModel)
-  startExtractSchedule(mem, cfg, sleepModel)
+  const pages = new Pages(sidecars(cfg.dbPath).pages)
+  startSleepSchedule(mem, cfg, sleepModel, console.log, pages)
+  startExtractSchedule(mem, cfg, sleepModel, console.log, 60_000, pages)
   serve({ fetch: app.fetch, hostname: host, port }, () => console.log(`${cfg.name} on http://${host}:${port} - memory ${cfg.dbPath} - model ${cfg.model} - sleep ${cfg.sleepAt || 'off'}`))
 }

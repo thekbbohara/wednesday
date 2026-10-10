@@ -2,7 +2,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
-import { mkdtempSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -51,6 +51,9 @@ describe('majordomo MCP server', () => {
         'memory_write',
         'now_get',
         'now_update',
+        'page_get',
+        'page_list',
+        'page_update',
         'skill_add',
         'task_create',
         'task_get',
@@ -85,6 +88,19 @@ describe('majordomo MCP server', () => {
   it('keeps memory_write as an alias, and searches by keyword when there is no meaning index', async () => {
     expect(text(await call('memory_write', { kind: 'project', subject: 'pc health', body: 'the PC froze under load', source: 'owner' }))).toMatch(/^Saved F\d+\.$/)
     expect(text(await call('memory_search', { query: 'froze', scope: 'facts' }))).toMatch(/pc health/)
+  })
+
+  it('creates, lists and reads project pages in a sidecar, never in memory.db', async () => {
+    expect(text(await call('page_list'))).toMatch(/No project pages yet/)
+    expect((await call('page_update', { slug: 'pc-health', title: 'PC health', keywords: ['ssd'], body: 'freezes [F999]' })).isError).toBe(true)
+    expect(text(await call('page_update', { slug: 'pc-health', title: 'PC health', keywords: ['ssd', 'nvme'], body: 'SSD runs hot [F1]' }))).toMatch(/^Page pc-health is v1/)
+    expect(text(await call('page_list'))).toMatch(/^pc-health v1 .* PC health \[ssd, nvme\]/)
+    expect(text(await call('page_get', { slug: 'pc-health', history: true }))).toMatch(/SSD runs hot \[F1\][^]*v1 .*sess-1: created/)
+    expect(existsSync(db.replace(/\.db$/, '-pages.db'))).toBe(true)
+    const m = new Memory(db)
+    expect(m.db.prepare("SELECT name FROM sqlite_master WHERE name LIKE 'page%'").all()).toEqual([])
+    expect(m.ledgerTail(1, ['page'])[0].text).toBe('Page pc-health v1 (PC health): created')
+    m.close()
   })
 
   it('says plainly that agents need the web server when it is not running', async () => {

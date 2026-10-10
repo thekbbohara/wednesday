@@ -6,12 +6,13 @@ import { spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { claudeEnv } from '../claude-account.ts'
 import { FACT_KINDS, type Fact, type FactKind, type LedgerEntry, type Memory } from '../memory/store.ts'
+import { PAGE_BUDGET, type Pages } from '../memory/pages.ts'
 
 export const SLEEP_SESSION = 'sleep'
 const CURSOR = 'sleep_cursor'
 const EXTRACT_CURSOR = 'extract_cursor'
 const EXTRACT_FACTS = { all: 12_000, relevant: 40, recent: 20 }
-const EXTRACT_PASS = '<pass>Quick pass during the day, not the nightly sleep: only facts (add, supersede, stale, merge). No digest.</pass>'
+const EXTRACT_PASS = '<pass>Quick pass during the day, not the nightly sleep: facts (add, supersede, stale, merge) and project pages only. No digest.</pass>'
 const ENTRY_CHARS = 2000
 const ALL_FACTS_CHARS = 40_000
 
@@ -28,7 +29,20 @@ export interface SleepOps {
   stale: { id: string; reason: string }[]
   merge: { keep: string; drop: string[] }[]
   digest: string
+  /** Project pages to create or rewrite (whole bodies). Optional: most calls change none. */
+  pages?: PageOp[]
 }
+
+export interface PageOp {
+  slug: string
+  title?: string
+  keywords?: string[]
+  body: string
+  note?: string
+}
+
+/** At most this many page writes per model call. */
+const MAX_PAGE_OPS = 3
 
 const fact = {
   kind: { type: 'string', enum: [...FACT_KINDS] },
@@ -58,6 +72,20 @@ export const OPS_SCHEMA = {
       items: { type: 'object', properties: { keep: { type: 'string' }, drop: { type: 'array', items: { type: 'string' } } }, required: ['keep', 'drop'] },
     },
     digest: { type: 'string' },
+    pages: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          slug: { type: 'string' },
+          title: { type: 'string' },
+          keywords: { type: 'array', items: { type: 'string' } },
+          body: { type: 'string', description: `whole page, max ${PAGE_BUDGET} chars, citing [F..] [T..] [L..] ids` },
+          note: { type: 'string' },
+        },
+        required: ['slug', 'body'],
+      },
+    },
   },
   required: ['add', 'supersede', 'stale', 'merge', 'digest'],
 }
@@ -156,6 +184,8 @@ export interface DayResult {
   superseded: number
   staled: number
   merged: number
+  /** Project pages created or rewritten. */
+  pages: number
   /** Operations refused by validation, with the reason. */
   skipped: string[]
   digest: string
@@ -194,7 +224,17 @@ export function localDay(ts: string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-export function buildDayPrompt(date: string, entries: LedgerEntry[], facts: Fact[]): string {
+/** The pages block: every page by name, and in full the ones these entries are about. */
+export function pagesBlock(pages: Pages | null | undefined, entries: LedgerEntry[]): string {
+  if (!pages) return ''
+  const all = pages.list()
+  const about = pages.match(entries.map((e) => e.text.slice(0, 1500)).join('\n'), 3)
+  const index = all.length ? all.map((p) => `${p.slug}: ${p.title} [${p.keywords.join(', ')}]`).join('\n') : '(none yet)'
+  const full = about.map((p) => `<page slug="${p.slug}" title="${p.title}" version="${p.version}">\n${p.body}\n</page>`).join('\n')
+  return `\n<pages>\n${index}\n${full}\n</pages>`
+}
+
+export function buildDayPrompt(date: string, entries: LedgerEntry[], facts: Fact[], pages = ''): string {
   const ledger = entries
     .map((e) => {
       const text = e.text.length > ENTRY_CHARS ? `${e.text.slice(0, ENTRY_CHARS)} ...[cut]` : e.text
@@ -202,7 +242,7 @@ export function buildDayPrompt(date: string, entries: LedgerEntry[], facts: Fact
     })
     .join('\n')
   const known = facts.length ? facts.map((f) => `F${f.id} [${f.kind}] ${f.subject}: ${f.body} (source ${f.source}, ${f.updated_at.slice(0, 10)})`).join('\n') : '(none yet)'
-  return `<day date="${date}">\n<ledger>\n${ledger}\n</ledger>\n<facts>\n${known}\n</facts>\n</day>`
+  return `<day date="${date}">\n<ledger>\n${ledger}\n</ledger>\n<facts>\n${known}\n</facts>${pages}\n</day>`
 }
 
 /**
@@ -279,6 +319,27 @@ export function validate(ops: SleepOps, dayIds: Set<number>, mem: Memory): { ok:
 
 const num = (ref: string) => Number(String(ref).trim().slice(1))
 
+/** Writes page ops after the facts; each is validated by Pages.update (citations must exist). Returns refusals. */
+function applyPages(mem: Memory, pages: Pages | null | undefined, ops: PageOp[] | undefined): { pages: number; skipped: string[] } {
+  const skipped: string[] = []
+  let n = 0
+  if (!pages || !ops?.length) return { pages: 0, skipped }
+  for (const [i, op] of ops.entries()) {
+    if (i >= MAX_PAGE_OPS) {
+      skipped.push(`page ${op.slug}: more than ${MAX_PAGE_OPS} page writes in one pass`)
+      continue
+    }
+    try {
+      const before = pages.get(op.slug)?.version ?? 0
+      const p = pages.update(mem, op.slug, { title: op.title, keywords: op.keywords, body: op.body, note: op.note }, SLEEP_SESSION)
+      if (p.version !== before) n++
+    } catch (e) {
+      skipped.push(`page ${op.slug}: ${(e as Error).message}`)
+    }
+  }
+  return { pages: n, skipped }
+}
+
 function apply(mem: Memory, ops: SleepOps): Pick<DayResult, 'added' | 'superseded' | 'staled' | 'merged'> {
   for (const f of ops.add) mem.factWrite({ kind: f.kind, subject: f.subject.trim(), body: f.body.trim(), source: f.source.trim() }, SLEEP_SESSION)
   for (const f of ops.supersede)
@@ -293,12 +354,13 @@ function apply(mem: Memory, ops: SleepOps): Pick<DayResult, 'added' | 'supersede
   }
 }
 
-export function summaryLine(r: Pick<DayResult, 'added' | 'superseded' | 'staled' | 'merged'>): string {
+export function summaryLine(r: Pick<DayResult, 'added' | 'superseded' | 'staled' | 'merged'> & { pages?: number }): string {
   const parts = [
     r.added && `${r.added} new ${r.added === 1 ? 'fact' : 'facts'}`,
     r.superseded && `${r.superseded} updated`,
     r.staled && `${r.staled} outdated`,
     r.merged && `${r.merged} merged`,
+    r.pages && `${r.pages} project ${r.pages === 1 ? 'page' : 'pages'} updated`,
   ].filter(Boolean)
   return parts.length ? parts.join(', ') : 'nothing to change'
 }
@@ -307,7 +369,7 @@ export function summaryLine(r: Pick<DayResult, 'added' | 'superseded' | 'staled'
  * Consolidates everything since the last sleep, one local day at a time. The
  * cursor moves only after a day is fully applied, so a failed run is retried.
  */
-export async function runSleep(mem: Memory, model: SleepModel, opts: { dryRun?: boolean; maxChars?: number } = {}): Promise<SleepResult> {
+export async function runSleep(mem: Memory, model: SleepModel, opts: { dryRun?: boolean; maxChars?: number; pages?: Pages | null } = {}): Promise<SleepResult> {
   const cursor = Number(mem.metaGet(CURSOR) ?? 0)
   const fresh = mem.ledgerSince(cursor)
   const lastId = fresh.at(-1)?.id ?? cursor
@@ -322,10 +384,10 @@ export async function runSleep(mem: Memory, model: SleepModel, opts: { dryRun?: 
   for (const [date, entries] of byDay) {
     // Very long days are read in parts; facts written by one part are seen by the next.
     const parts = chunk(entries, opts.maxChars ?? 60_000)
-    const day: DayResult = { date, from: entries[0].id, to: entries.at(-1)!.id, added: 0, superseded: 0, staled: 0, merged: 0, skipped: [], digest: '', digestId: null }
+    const day: DayResult = { date, from: entries[0].id, to: entries.at(-1)!.id, added: 0, superseded: 0, staled: 0, merged: 0, pages: 0, skipped: [], digest: '', digestId: null }
     const digests: string[] = []
     for (const part of parts) {
-      const ops = await model.consolidate(buildDayPrompt(date, part, factsFor(mem, part)))
+      const ops = await model.consolidate(buildDayPrompt(date, part, factsFor(mem, part), pagesBlock(opts.pages, part)))
       result.proposals.push({ date, ops })
       const { ok, skipped } = validate(ops, new Set(part.map((e) => e.id)), mem)
       day.skipped.push(...skipped)
@@ -336,12 +398,15 @@ export async function runSleep(mem: Memory, model: SleepModel, opts: { dryRun?: 
       day.superseded += n.superseded
       day.staled += n.staled
       day.merged += n.merged
+      const pg = applyPages(mem, opts.pages, ops.pages)
+      day.pages += pg.pages
+      day.skipped.push(...pg.skipped)
     }
     day.digest = digests.join('\n\n')
     if (!opts.dryRun) {
       const entry = mem.append('digest', `Digest ${date}: ${day.digest || '(no digest)'}\n\nMemory: ${summaryLine(day)}.`, {
         session: SLEEP_SESSION,
-        meta: { date, from: day.from, to: day.to, added: day.added, superseded: day.superseded, staled: day.staled, merged: day.merged, skipped: day.skipped },
+        meta: { date, from: day.from, to: day.to, added: day.added, superseded: day.superseded, staled: day.staled, merged: day.merged, pages: day.pages, skipped: day.skipped },
       })
       day.digestId = entry.id
       mem.metaSet(CURSOR, String(day.to))
@@ -381,6 +446,7 @@ export interface ExtractResult {
   superseded: number
   staled: number
   merged: number
+  pages: number
   skipped: string[]
   usage: ModelUsage
 }
@@ -402,7 +468,7 @@ export function extractPending(mem: Memory): { count: number; oldest: string | n
  * no digest. The nightly sleep still reads the whole day and writes the digest;
  * it sees these facts and does not add them again.
  */
-export async function runExtract(mem: Memory, model: SleepModel, opts: { maxChars?: number } = {}): Promise<ExtractResult> {
+export async function runExtract(mem: Memory, model: SleepModel, opts: { maxChars?: number; pages?: Pages | null } = {}): Promise<ExtractResult> {
   const fresh = mem.ledgerSince(extractCursor(mem))
   const entries = fresh.filter(sleepInput)
   const r: ExtractResult = {
@@ -414,12 +480,13 @@ export async function runExtract(mem: Memory, model: SleepModel, opts: { maxChar
     superseded: 0,
     staled: 0,
     merged: 0,
+    pages: 0,
     skipped: [],
     usage: { costUsd: 0, inputTokens: 0, outputTokens: 0, ms: 0 },
   }
   for (const part of chunk(entries, opts.maxChars ?? 30_000)) {
     const date = localDay(part.at(-1)!.ts)
-    const out = await model.consolidate(`${EXTRACT_PASS}\n${buildDayPrompt(date, part, factsFor(mem, part, EXTRACT_FACTS))}`, { extract: true })
+    const out = await model.consolidate(`${EXTRACT_PASS}\n${buildDayPrompt(date, part, factsFor(mem, part, EXTRACT_FACTS), pagesBlock(opts.pages, part))}`, { extract: true })
     r.calls++
     if (out.usage) for (const k of ['costUsd', 'inputTokens', 'outputTokens', 'ms'] as const) r.usage[k] += out.usage[k]
     const { ok, skipped } = validate({ ...out, digest: '' }, new Set(part.map((e) => e.id)), mem)
@@ -429,6 +496,9 @@ export async function runExtract(mem: Memory, model: SleepModel, opts: { maxChar
     r.superseded += n.superseded
     r.staled += n.staled
     r.merged += n.merged
+    const pg = applyPages(mem, opts.pages, out.pages)
+    r.pages += pg.pages
+    r.skipped.push(...pg.skipped)
     // Each part is done once applied, so a failure later re-reads only what is left.
     mem.metaSet(EXTRACT_CURSOR, String(part.at(-1)!.id))
   }

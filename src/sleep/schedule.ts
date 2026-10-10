@@ -4,6 +4,7 @@ import { appendFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Config } from '../config.ts'
 import type { Memory } from '../memory/store.ts'
+import type { Pages } from '../memory/pages.ts'
 import { withFileLock } from '../captain/lock.ts'
 import { extractPending, localDay, runExtract, runSleep, summaryLine, type ExtractResult, type SleepModel, type SleepResult } from './sleep.ts'
 
@@ -21,7 +22,7 @@ export function due(at: string, lastDate: string | null, now: Date): boolean {
 /** Held by the nightly sleep and the quick pass, so they never consolidate at the same time. */
 const consolidateLock = (cfg: Config) => join(cfg.dataDir, 'consolidate.lock')
 
-export async function sleepNow(mem: Memory, cfg: Config, model: SleepModel, opts: { dryRun?: boolean } = {}): Promise<SleepResult> {
+export async function sleepNow(mem: Memory, cfg: Config, model: SleepModel, opts: { dryRun?: boolean; pages?: Pages | null } = {}): Promise<SleepResult> {
   return withFileLock(consolidateLock(cfg), (cfg.turnTimeout + 120) * 1000, () =>
     withFileLock(join(cfg.dataDir, 'captain.lock'), (cfg.turnTimeout + 120) * 1000, () => runSleep(mem, model, opts)),
   )
@@ -45,14 +46,14 @@ export function extractLine(r: ExtractResult): string {
  * lock (facts are small transactional writes), so the owner never waits on it.
  * Every run is logged to the console and to <data>/logs/extract.jsonl.
  */
-export function startExtractSchedule(mem: Memory, cfg: Config, model: SleepModel, log = console.log, everyMs = 60_000): () => void {
+export function startExtractSchedule(mem: Memory, cfg: Config, model: SleepModel, log = console.log, everyMs = 60_000, pages: Pages | null = null): () => void {
   let running = false
   let retryAt = 0
   const tick = async () => {
     if (running || Date.now() < retryAt || !extractDue(extractPending(mem), cfg.extractEvery, cfg.extractMinutes, new Date())) return
     running = true
     try {
-      const r = await withFileLock(consolidateLock(cfg), 1000, () => runExtract(mem, model))
+      const r = await withFileLock(consolidateLock(cfg), 1000, () => runExtract(mem, model, { pages }))
       log(extractLine(r))
       try {
         mkdirSync(join(cfg.dataDir, 'logs'), { recursive: true })
@@ -73,7 +74,7 @@ export function startExtractSchedule(mem: Memory, cfg: Config, model: SleepModel
   return () => clearInterval(timer)
 }
 
-export function startSleepSchedule(mem: Memory, cfg: Config, model: SleepModel, log = console.log): () => void {
+export function startSleepSchedule(mem: Memory, cfg: Config, model: SleepModel, log = console.log, pages: Pages | null = null): () => void {
   // cfg.sleepAt is read on every tick: Settings can turn the sleep on, off or move it.
   let running = false
   let retryAt = 0
@@ -82,7 +83,7 @@ export function startSleepSchedule(mem: Memory, cfg: Config, model: SleepModel, 
     if (running || Date.now() < retryAt || !due(cfg.sleepAt, mem.metaGet(LAST), now)) return
     running = true
     try {
-      const r = await sleepNow(mem, cfg, model)
+      const r = await sleepNow(mem, cfg, model, { pages })
       mem.metaSet(LAST, localDay(now.toISOString()))
       log(`sleep: ${r.days.length ? r.days.map((d) => `${d.date} ${summaryLine(d)}${d.skipped.length ? ` (${d.skipped.length} refused)` : ''}`).join('; ') : 'nothing new'}`)
     } catch (e) {

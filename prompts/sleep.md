@@ -19,6 +19,17 @@ Operations:
   dropped, a person left). Give the reason.
 - `merge`: two or more facts say the same thing. `keep` the best one, `drop`
   the rest.
+- `pages` (optional): project pages are living summaries, one per project.
+  `<pages>` lists them all, and shows in full the ones this ledger touches.
+  When the ledger changes a project's state (something shipped, broke,
+  decided, dropped, now waits on the owner), return that page's whole new
+  body: keep what is still true, change what changed, drop what is over. At
+  most 3 pages per answer; most answers change none. Every claim cites its
+  id ([F12], [T3], [L120]); only cite ids that appear in this input. A new
+  page (with `title` and 3 to 8 `keywords`, the words that name the project)
+  only for a project that already has several facts or tasks, never for a
+  one-off. Bodies are short markdown, under 2,500 characters. `note` says in
+  a few words what changed.
 - `digest`: 3 to 8 plain sentences on what happened that day: goals, what got
   done, decisions and why, what is still open. Cite L ids like [L12].
 
