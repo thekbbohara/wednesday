@@ -1,0 +1,4 @@
+allowBuilds:
+  # Prebuilt binaries ship in the package; the install script only fetches CUDA extras.
+  onnxruntime-node: false
+  protobufjs: false

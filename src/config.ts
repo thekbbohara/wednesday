@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { parseChain, type Engine, type Provider } from './captain/provider.ts'
 import { assistantEnv } from './env.ts'
 import { expandHome } from './claude-account.ts'
@@ -37,6 +37,12 @@ export interface Config {
   sleepAt: string
   sleepModel: string
   sleepPromptFile: string
+  /** Fact extraction between sleeps: run once this many new conversation entries are waiting; 0 turns it off. */
+  extractEvery: number
+  /** ...or once the oldest waiting entry is this many minutes old. */
+  extractMinutes: number
+  /** Local embedding model for meaning search (transformers.js id); empty = keyword search only. */
+  embedModel: string
   /** Primary Claude login first, then fallbacks tried in order on a usage limit. The primary's account is `claudeConfigDir`, applied per turn (see primaryChain). */
   captainChain: Provider[]
   /** How long a provider that hit its limit is skipped before it is tried again. */
@@ -44,6 +50,22 @@ export interface Config {
 }
 
 const env = process.env
+
+/** Unset = the default model; "off" (or "none") = meaning search disabled. */
+function embedModel(v: string | undefined): string {
+  if (v === undefined || v.trim() === '') return 'Xenova/bge-small-en-v1.5'
+  return /^(off|none|false|0)$/i.test(v.trim()) ? '' : v.trim()
+}
+
+/**
+ * Files kept beside memory.db. memory-vec.db is a rebuildable cache of
+ * embeddings, memory-pages.db holds the project pages, models/ the embedding
+ * model. None of them changes memory.db.
+ */
+export function sidecars(dbPath: string): { vec: string; pages: string; models: string } {
+  const base = dbPath.replace(/\.db$/, '')
+  return { vec: `${base}-vec.db`, pages: `${base}-pages.db`, models: join(dirname(dbPath), 'models') }
+}
 
 function num(name: string, fallback: number): number {
   const v = assistantEnv(name)
@@ -108,6 +130,9 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     sleepAt: assistantEnv('SLEEP_AT') ?? '04:00',
     sleepModel: assistantEnv('SLEEP_MODEL') || 'haiku',
     sleepPromptFile: assistantEnv('SLEEP_PROMPT_FILE') || resolve(import.meta.dirname, '../prompts/sleep.md'),
+    extractEvery: num('EXTRACT_EVERY', 30),
+    extractMinutes: num('EXTRACT_MINUTES', 60),
+    embedModel: embedModel(assistantEnv('EMBED_MODEL')),
     captainChain: parseChain(assistantEnv('FALLBACKS')),
     limitCooldownMs: num('LIMIT_COOLDOWN_MIN', 180) * 60_000,
   }

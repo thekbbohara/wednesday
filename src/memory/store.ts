@@ -9,7 +9,7 @@ import { EXP_RULES, levelFor, OVERALL_SCALE } from '../skills/levels.ts'
 
 export const SCHEMA_VERSION = 3
 
-export const LEDGER_KINDS = ['owner', 'captain', 'decision', 'agent', 'task', 'fact', 'now', 'system', 'rotation', 'digest'] as const
+export const LEDGER_KINDS = ['owner', 'captain', 'decision', 'agent', 'task', 'fact', 'now', 'system', 'rotation', 'digest', 'page'] as const
 export type LedgerKind = (typeof LEDGER_KINDS)[number]
 
 export const FACT_KINDS = ['owner', 'person', 'project', 'preference', 'decision', 'other'] as const
@@ -57,6 +57,8 @@ export interface StoreOptions {
   /** Max characters of the Now layer (~4 chars per token). */
   nowBudgetChars?: number
   clock?: () => Date
+  /** Open without write access (background readers such as the embedding indexer). */
+  readOnly?: boolean
 }
 
 const SCHEMA = `
@@ -203,9 +205,14 @@ export class Memory {
 
   constructor(path: string, opts: StoreOptions = {}) {
     this.path = path
-    if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true })
-    this.db = new DatabaseSync(path)
-    this.db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;')
+    if (opts.readOnly) {
+      this.db = new DatabaseSync(path, { readOnly: true })
+      this.db.exec('PRAGMA busy_timeout = 5000;')
+    } else {
+      if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true })
+      this.db = new DatabaseSync(path)
+      this.db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;')
+    }
     this.nowBudgetChars = opts.nowBudgetChars ?? 8000
     this.clock = opts.clock ?? (() => new Date())
     this.init()
@@ -587,10 +594,27 @@ export class Memory {
          WHERE facts_fts MATCH ? ${stale} ORDER BY score LIMIT ?`,
       )
       .all(q, limit) as Row[]
-    return rows.map((r) => {
-      const f = toFact(r)
-      return { ref: `F${f.id}`, kind: 'fact', title: `[${f.kind}] ${f.subject}${f.stale ? ' (stale)' : ''}`, text: f.body, date: f.updated_at, score: Number(r.score) }
-    })
+    return rows.map((r) => factHit(toFact(r), Number(r.score)))
+  }
+
+  /** One fact as a search hit (for results found by meaning, not keywords). */
+  searchFactHit(id: number): Hit | null {
+    const f = this.factGet(id)
+    return f ? factHit(f, 0) : null
+  }
+
+  searchTaskHit(id: number): Hit | null {
+    const t = this.taskGet(id)
+    return t ? taskHit(t as unknown as Row, 0) : null
+  }
+
+  /** A ledger entry as a hit; the text is its start, since there is no keyword to center a snippet on. */
+  searchLedgerHit(id: number): Hit | null {
+    const e = this.ledgerGet(id)
+    if (!e) return null
+    const outdated = this.outdated(e) ?? undefined
+    const text = e.text.length > 360 ? `${e.text.slice(0, 360)} ...` : e.text
+    return { ref: `L${e.id}`, kind: 'ledger', title: e.kind, text, date: e.ts, score: 0, ...(outdated ? { outdated } : {}) }
   }
 
   searchLedger(query: string, limit = 8, opts: { beforeId?: number; kinds?: readonly LedgerKind[] } = {}): Hit[] {
@@ -629,14 +653,7 @@ export class Memory {
          WHERE tasks_fts MATCH ? ORDER BY score LIMIT ?`,
       )
       .all(q, limit) as Row[]
-    return rows.map((r) => ({
-      ref: `T${r.id}`,
-      kind: 'task',
-      title: `[${r.status}] ${r.title}`,
-      text: `Goal: ${r.goal}${r.result ? ` Result: ${r.result}` : ''}`,
-      date: String(r.updated_at),
-      score: Number(r.score),
-    }))
+    return rows.map((r) => taskHit(r, Number(r.score)))
   }
 
   /** Everything matching a query, best first per layer. */
@@ -659,6 +676,14 @@ export class Memory {
     const outdated = p.kind === 'ledger' ? this.outdated(record as LedgerEntry) : null
     return { ref: ref.toUpperCase(), kind: p.kind, record: outdated ? { ...record, outdated } : record }
   }
+}
+
+function factHit(f: Fact, score: number): Hit {
+  return { ref: `F${f.id}`, kind: 'fact', title: `[${f.kind}] ${f.subject}${f.stale ? ' (stale)' : ''}`, text: f.body, date: f.updated_at, score }
+}
+
+function taskHit(r: Row, score: number): Hit {
+  return { ref: `T${r.id}`, kind: 'task', title: `[${r.status}] ${r.title}`, text: `Goal: ${r.goal}${r.result ? ` Result: ${r.result}` : ''}`, date: String(r.updated_at), score }
 }
 
 function toLedger(r: Row): LedgerEntry {

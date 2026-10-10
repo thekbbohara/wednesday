@@ -41,5 +41,8 @@
     "typescript": "^7.0.2",
     "vite": "^8.3.2",
     "vitest": "^5.0.3"
+  },
+  "optionalDependencies": {
+    "@huggingface/transformers": "4.3.0"
   }
 }
