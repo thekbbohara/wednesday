@@ -1,19 +1,22 @@
 // Turns ledger entries into what the chat shows. The chat is the ledger:
 // conversation, receipts of what the captain wrote to memory, and failures.
 // Session starts and rotations stay invisible.
+import { existsSync } from 'node:fs'
 import type { LedgerEntry, Memory } from '../memory/store.ts'
+import { Pages, type PageVersion } from '../memory/pages.ts'
+import { sidecars } from '../config.ts'
 import { SLEEP_SESSION, summaryLine } from '../sleep/sleep.ts'
 
 export type ChatItem =
   | { type: 'owner' | 'captain'; id: number; ts: string; text: string }
-  | { type: 'receipt'; id: number; ts: string; verb: string; ref: string }
+  | { type: 'receipt'; id: number; ts: string; verb: string; ref: string; label?: string }
   | { type: 'error'; id: number; ts: string; text: string }
   | { type: 'agent'; id: number; ts: string; agent: string; event: string; text: string; prompt?: string }
   | { type: 'digest'; id: number; ts: string; text: string }
   | { type: 'levelup'; id: number; ts: string; skill: string; level: number }
   | { type: 'newskill'; id: number; ts: string; skill: string; name: string; color: string }
 
-const SHOWN = ['owner', 'captain', 'fact', 'task', 'decision', 'now', 'system', 'agent', 'digest'] as const
+const SHOWN = ['owner', 'captain', 'fact', 'task', 'decision', 'now', 'system', 'agent', 'digest', 'page'] as const
 /** Agent events the owner sees; the captain's own messages and answers to agents stay in the ledger. */
 const SHOWN_AGENT_EVENTS = new Set(['spawn', 'report', 'needs', 'exit', 'error', 'stop'])
 /** The owner's own answers and replies to agents show, so a click in the chat leaves a trace there. */
@@ -22,7 +25,8 @@ const OWNER_AGENT_EVENTS = new Set(['answer', 'message'])
 export function toChatItem(e: LedgerEntry): ChatItem | null {
   const base = { id: e.id, ts: e.ts }
   // The nightly sleep shows as one overnight row (its digest), not a stream of receipts.
-  if (e.session === SLEEP_SESSION && e.kind !== 'digest') return null
+  // Page rewrites are the exception: a project's summary changing is worth one line, whoever wrote it.
+  if (e.session === SLEEP_SESSION && e.kind !== 'digest' && e.kind !== 'page') return null
   switch (e.kind) {
     case 'digest': {
       const m = e.meta ?? {}
@@ -60,6 +64,11 @@ export function toChatItem(e: LedgerEntry): ChatItem | null {
       return { ...base, type: 'receipt', verb: 'decided', ref: `L${e.id}` }
     case 'now':
       return { ...base, type: 'receipt', verb: 'updated', ref: 'now' }
+    case 'page': {
+      const slug = e.meta?.page
+      if (typeof slug !== 'string') return null
+      return { ...base, type: 'receipt', verb: e.meta?.version === 1 ? 'started page' : 'updated page', ref: `L${e.id}`, label: slug }
+    }
     case 'system': {
       const up = e.meta?.levelup as { skill: string; level: number } | undefined
       if (up) return { ...base, type: 'levelup', skill: up.skill, level: up.level }
@@ -164,6 +173,12 @@ export function describeRef(mem: Memory, ref: string, name = 'Wednesday'): { ref
         const body = String(r.text).replace(/^\S+ reported:\n/, '')
         return { ref: got.ref, title: `${meta.agent ?? 'Agent'}, ${String(meta.event ?? 'event')}`, body, date: String(r.ts) }
       }
+      if (kind === 'page') {
+        // The page as it was at that version (the ledger keeps only the change note).
+        const meta = (r.meta ?? {}) as Record<string, unknown>
+        const v = pageVersion(mem, String(meta.page), Number(meta.version))
+        return { ref: got.ref, title: `Page ${meta.page}, version ${meta.version}`, body: v ? `${v.note}\n\n${v.body}` : String(r.text), date: String(r.ts) }
+      }
       if (kind === 'digest') {
         const meta = (r.meta ?? {}) as Record<string, unknown>
         return { ref: got.ref, title: `Digest of ${meta.date ?? 'the day'}`, body: String(r.text).replace(/^Digest \S+: /, ''), date: String(r.ts) }
@@ -171,5 +186,21 @@ export function describeRef(mem: Memory, ref: string, name = 'Wednesday'): { ref
       const who = kind === 'owner' ? 'You said' : kind === 'captain' ? `${name} said` : kind[0].toUpperCase() + kind.slice(1)
       return { ref: got.ref, title: who, body: String(r.text), date: String(r.ts) }
     }
+  }
+}
+
+/** One stored version of a page, from the pages sidecar; null when it is not there. */
+function pageVersion(mem: Memory, slug: string, version: number): PageVersion | null {
+  const path = mem.path === ':memory:' ? '' : sidecars(mem.path).pages
+  if (!path || !existsSync(path)) return null
+  try {
+    const pages = new Pages(path)
+    try {
+      return pages.history(slug, 1000).find((v) => v.version === version) ?? null
+    } finally {
+      pages.close()
+    }
+  } catch {
+    return null
   }
 }

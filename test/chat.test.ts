@@ -30,3 +30,28 @@ describe('promptOf', () => {
     expect(promptOf(e)).toBe('Overwrite file? (y/n)')
   })
 })
+
+describe('page rows', () => {
+  it('shows a page change as one receipt line, from the captain or the background pass, and opens that version', async () => {
+    const { mkdtempSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { Memory } = await import('../src/memory/store.ts')
+    const { Pages } = await import('../src/memory/pages.ts')
+    const { sidecars } = await import('../src/config.ts')
+    const { chatPage, describeRef, toChatItem } = await import('../src/web/chat.ts')
+    const mem = new Memory(join(mkdtempSync(join(tmpdir(), 'wed-chatpage-')), 'memory.db'))
+    const pages = new Pages(sidecars(mem.path).pages)
+    const f = mem.factWrite({ kind: 'project', subject: 'clipcrew', body: 'studio app', source: 'owner' })
+    pages.update(mem, 'clipcrew', { title: 'ClipCrew', keywords: ['clipcrew'], body: `Studio app [F${f.id}].` }, 'sess')
+    pages.update(mem, 'clipcrew', { body: `Studio app moved [F${f.id}].`, note: 'moved' }, 'sleep')
+    const [v1, v2] = mem.ledgerTail(2, ['page'])
+    expect(toChatItem(v1)).toEqual({ id: v1.id, ts: v1.ts, type: 'receipt', verb: 'started page', ref: `L${v1.id}`, label: 'clipcrew' })
+    expect(toChatItem(v2)).toMatchObject({ type: 'receipt', verb: 'updated page', label: 'clipcrew' })
+    expect(chatPage(mem, null, 10).items.filter((i) => i.type === 'receipt' && i.label === 'clipcrew')).toHaveLength(2)
+    const ref = describeRef(mem, `L${v1.id}`)!
+    expect(ref.title).toBe('Page clipcrew, version 1')
+    expect(ref.body).toBe(`created\n\nStudio app [F${f.id}].`)
+    expect(describeRef(mem, `L${v2.id}`)!.body).toMatch(/^moved\n\nStudio app moved/)
+  })
+})

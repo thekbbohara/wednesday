@@ -1,6 +1,6 @@
 export type ChatItem =
   | { type: "owner" | "captain"; id: number; ts: string; text: string }
-  | { type: "receipt"; id: number; ts: string; verb: string; ref: string }
+  | { type: "receipt"; id: number; ts: string; verb: string; ref: string; label?: string }
   | { type: "error"; id: number; ts: string; text: string }
   | { type: "agent"; id: number; ts: string; agent: string; event: string; text: string; prompt?: string }
   | { type: "digest"; id: number; ts: string; text: string }

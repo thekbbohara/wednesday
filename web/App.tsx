@@ -662,7 +662,7 @@ function Receipts({ receipts, onRef }: { receipts: Receipt[]; onRef: OnRef }) {
   // One line per turn: collapse repeats ("updated T1" twice -> once).
   const seen = new Set<string>();
   const uniq = receipts.filter((r) => {
-    const k = `${r.verb} ${r.ref}`;
+    const k = `${r.verb} ${r.label ?? r.ref}`;
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
@@ -674,7 +674,7 @@ function Receipts({ receipts, onRef }: { receipts: Receipt[]; onRef: OnRef }) {
           {i > 0 && <span className="receipts__sep" aria-hidden>·</span>}
           {r.verb}{" "}
           <button className="chip" onClick={(e) => onRef(r.ref, e)}>
-            {r.ref === "now" ? "Now" : r.ref}
+            {r.label ?? (r.ref === "now" ? "Now" : r.ref)}
           </button>
         </span>
       ))}
