@@ -1,5 +1,14 @@
+/** A local file a message shows (see src/web/media.ts). */
+export interface MediaRef {
+  path: string;
+  name: string;
+  size: number;
+  kind: "image" | "video" | "audio" | "file";
+  mime: string;
+}
+
 export type ChatItem =
-  | { type: "owner" | "captain"; id: number; ts: string; text: string }
+  | { type: "owner" | "captain"; id: number; ts: string; text: string; media?: MediaRef[] }
   | { type: "receipt"; id: number; ts: string; verb: string; ref: string; label?: string }
   | { type: "error"; id: number; ts: string; text: string }
   | { type: "agent"; id: number; ts: string; agent: string; event: string; text: string; prompt?: string }
@@ -170,8 +179,8 @@ export const api = {
     fetch(`/api/chat?limit=40${before ? `&before=${before}` : ""}`).then((r) =>
       json<{ items: ChatItem[]; hasMore: boolean; status: Status }>(r),
     ),
-  send: (text: string) =>
-    fetch("/api/messages", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) }).then((r) =>
+  send: (text: string, attachments: string[] = []) =>
+    fetch("/api/messages", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(attachments.length ? { text, attachments } : { text }) }).then((r) =>
       json<{ item: ChatItem; reply?: ChatItem }>(r),
     ),
   retry: (id: number) =>
@@ -202,6 +211,41 @@ export const api = {
     return { settings: body.settings!, claudeAccount: body.claudeAccount! };
   },
 };
+
+/** Where the chat reads a local file; `download` asks for a save instead of a view. */
+export function mediaUrl(path: string, download = false): string {
+  return `/api/media?path=${encodeURIComponent(path)}${download ? "&download=1" : ""}`;
+}
+
+/**
+ * Upload one file (streamed by the server to <data>/inbox/web). XHR, not
+ * fetch, because only XHR reports upload progress.
+ */
+export function uploadFile(file: File, onProgress: (fraction: number) => void, signal: AbortSignal): Promise<MediaRef> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `/api/uploads?name=${encodeURIComponent(file.name)}`);
+    xhr.setRequestHeader("content-type", file.type || "application/octet-stream");
+    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
+    xhr.onload = () => {
+      const body = (() => {
+        try {
+          return JSON.parse(xhr.responseText) as { file?: MediaRef; error?: string };
+        } catch {
+          return {};
+        }
+      })();
+      if (xhr.status >= 200 && xhr.status < 300 && body.file) resolve(body.file);
+      else reject(new Error(body.error ?? `upload failed (${xhr.status})`));
+    };
+    xhr.onerror = () => reject(new Error("upload failed: connection lost"));
+    xhr.onabort = () => reject(new DOMException("aborted", "AbortError"));
+    signal.addEventListener("abort", () => xhr.abort(), { once: true });
+    xhr.send(file);
+  });
+}
+
+export const deleteUpload = (path: string) => fetch(`/api/uploads?path=${encodeURIComponent(path)}`, { method: "DELETE" }).catch(() => {});
 
 /** Merge by id, keeping ledger order. */
 export function mergeItems(a: ChatItem[], b: ChatItem[]): ChatItem[] {

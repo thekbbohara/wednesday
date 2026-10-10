@@ -259,3 +259,34 @@ responsive grid, --panel-2 cards, 18px radius and 16px gaps. Fredoka names,
 Descriptions wrap to readable text; expandable sources show every original
 SKILL.md path and resolved symlink target in wrapping monospace. Refresh reads
 current installations, and loading, empty and error states stay in this section.
+
+## Files in the chat (T84)
+
+The owner attaches files three ways: the paperclip button (36px, --muted
+line icon, left of the textarea; hover --line circle), dropping files anywhere
+on the Command Center (a dashed 2px --blue-deep frame, radius 18, over the
+card with a "Drop to attach" pill in Fredoka 600 17), and pasting (a pasted
+screenshot is named screenshot.png). Each file uploads at once.
+
+- **Tray**: a row inside the composer pill, above the textarea. Images and
+  videos are 64px tiles (radius 14, cover-cropped; video gets a centered play
+  glyph and its size); other files are 64px tall chips (36px --blue-deep 12%
+  tint square with the extension in mono 10, name 13/600, size 12 --muted).
+  Every item has a 20px dark round remove (x) at the top-right; removing one
+  deletes its upload. While uploading, the tile dims, the badge shows the
+  percent and a 4px --blue-deep bar fills along the bottom. A failed upload
+  gets a --coral ring. Send waits until every upload is done.
+- **In messages**: files sit beside the bubble, outside it: right-aligned
+  above the owner's text, under the captain's bubble at captain indent, at most
+  420 wide. One image shows whole (max 320 tall, radius 18, 1px --line); two or
+  more make a 2-column grid of square crops (radius 12, gap 4). Videos keep
+  their own shape (max 360 tall, radius 18, --ink behind) with native
+  controls; audio is a white card with the name and a player; other files are
+  the file chip (radius 14, white, 1px --line). A markdown image in a captain
+  reply renders in place inside the bubble. A file the browser cannot show
+  falls back to the chip.
+- **Full size**: clicking an image opens a lightbox (--ink at 86%, image
+  contained, name 13/600 white, "Open original" and close as translucent
+  white pills); Esc, the close button or a click outside closes it.
+- The owner's own "(Web: I attached ...)" notes are for the captain; the chat
+  shows the files instead.

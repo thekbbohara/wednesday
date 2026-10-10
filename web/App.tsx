@@ -1,8 +1,9 @@
 import { lazy, Suspense } from "react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
-import Markdown, { type Components } from "react-markdown";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import Markdown, { defaultUrlTransform, type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { api, mergeItems, RUNTIME_COLOR, type Agent, type AgentDetail, type ChatItem, type RefInfo, type SkillView, type Status } from "./api";
+import { api, deleteUpload, mediaUrl, mergeItems, RUNTIME_COLOR, uploadFile, type Agent, type AgentDetail, type ChatItem, type MediaRef, type RefInfo, type SkillView, type Status } from "./api";
+import { displayName, formatSize, isLocalPath, kindOfName, MediaItem, MediaList } from "./Media";
 import { ExpBar, SkillBody, SkillIcon } from "./Skills";
 import { Cited } from "./Cited";
 import { Nav, usePage } from "./Nav";
@@ -109,7 +110,8 @@ export function App() {
     else setUnseen(true);
   }, [rows, status.thinking, trailing.length]);
 
-  // Keep the newest message in view when the viewport changes (rotation, on-screen keyboard, composer growing).
+  // Keep the newest message in view when the viewport changes (rotation, on-screen keyboard, composer growing)
+  // or the content does (an image or video in a message finishing loading).
   useEffect(() => {
     const el = scroller.current;
     if (!el) return;
@@ -117,6 +119,7 @@ export function App() {
       if (atBottom.current) el.scrollTop = el.scrollHeight;
     });
     ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
     return () => ro.disconnect();
   }, []);
 
@@ -191,9 +194,41 @@ export function App() {
 
   const closePopover = useCallback(() => setPopover(null), []);
 
-  const send = async (text: string) => {
+  // Files dropped anywhere on the chat go to the composer.
+  const [dragging, setDragging] = useState(false);
+  const depth = useRef(0);
+  const hasFiles = (e: DragEvent) => [...e.dataTransfer.types].includes("Files");
+  const dropProps = {
+    onDragEnter: (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      depth.current++;
+      setDragging(true);
+    },
+    onDragOver: (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    },
+    onDragLeave: (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      if (--depth.current <= 0) {
+        depth.current = 0;
+        setDragging(false);
+      }
+    },
+    onDrop: (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      depth.current = 0;
+      setDragging(false);
+      dispatchEvent(new CustomEvent("wednesday:attach", { detail: [...e.dataTransfer.files] }));
+    },
+  };
+
+  const send = async (text: string, attachments: string[] = []) => {
     atBottom.current = true;
-    const { item, reply } = await api.send(text);
+    const { item, reply } = await api.send(text, attachments);
     setItems((cur) => mergeItems(cur, reply ? [item, reply] : [item]));
   };
 
@@ -216,7 +251,12 @@ export function App() {
 
         <section className="page">
           {/* The chat stays mounted on other pages, so its scroll and draft survive. */}
-          <div className="page__view" hidden={page !== "command"}>
+          <div className="page__view" hidden={page !== "command"} {...dropProps}>
+            {dragging && (
+              <div className="dropzone" aria-hidden>
+                <span className="dropzone__label">Drop to attach</span>
+              </div>
+            )}
             <PageHead title="Command Center" />
             <div className="thread" ref={scroller} onScroll={onScroll}>
               <div className="thread__inner">
@@ -494,9 +534,12 @@ function RowView({
     case "owner":
       return (
         <div className={`msg msg--owner${row.first ? " msg--first" : ""}`}>
-          <Bubble side="owner" ts={row.item.ts}>
-            {row.item.text}
-          </Bubble>
+          {row.item.media && <MediaList media={row.item.media} side="owner" />}
+          {(row.item.text || !row.item.media) && (
+            <Bubble side="owner" ts={row.item.ts}>
+              {row.item.text}
+            </Bubble>
+          )}
         </div>
       );
     case "captain":
@@ -507,6 +550,7 @@ function RowView({
             <Bubble side="captain" ts={row.item.ts}>
               <Rich text={row.item.text} onRef={onRef} />
             </Bubble>
+            {row.item.media && <MediaList media={row.item.media} side="captain" />}
             {row.receipts.length > 0 && <Receipts receipts={row.receipts} onRef={onRef} />}
           </div>
         </div>
@@ -696,22 +740,32 @@ function Rich({ text, onRef }: { text: string; onRef: OnRef }) {
           );
         }
         return (
-          <a href={href} target="_blank" rel="noreferrer noopener" {...rest}>
+          <a href={isLocalPath(href) ? mediaUrl(href) : href} target="_blank" rel="noreferrer noopener" {...rest}>
             {children}
           </a>
         );
+      },
+      // ![alt](/home/me/a.png) shows the file where it is written: image, player or chip.
+      img: ({ src, alt }) => {
+        const path = typeof src === "string" ? src : undefined;
+        if (!isLocalPath(path)) return <img src={path} alt={alt ?? ""} />;
+        const name = path.split("/").pop() || path;
+        return <MediaItem path={path} name={name} kind={kindOfName(name)} alt={alt ?? undefined} />;
       },
     }),
     [onRef],
   );
   return (
     <div className="md">
-      <Markdown remarkPlugins={[remarkGfm, remarkCitations]} components={components}>
+      <Markdown remarkPlugins={[remarkGfm, remarkCitations]} components={components} urlTransform={keepFileUrls}>
         {text}
       </Markdown>
     </div>
   );
 }
+
+/** react-markdown drops file: URLs; local files are served through /api/media instead. */
+const keepFileUrls = (url: string) => (/^file:\/\//i.test(url) ? url : defaultUrlTransform(url));
 
 interface MdNode {
   type: string;
@@ -959,7 +1013,20 @@ function AnswerBody({ id, prompt, choices }: { id: string; prompt: string | null
   );
 }
 
-function Composer({ onSend, name, engine }: { onSend: (text: string) => Promise<void>; name: string; engine: string }) {
+/** A file in the composer: uploading as soon as it is added, sent with the message. */
+interface Attachment {
+  key: string;
+  file: File;
+  kind: MediaRef["kind"];
+  /** Object URL for the preview of an image or video. */
+  preview: string | null;
+  progress: number;
+  ref: MediaRef | null;
+  error: string;
+  abort: AbortController;
+}
+
+function Composer({ onSend, name, engine }: { onSend: (text: string, attachments?: string[]) => Promise<void>; name: string; engine: string }) {
   const [text, setText] = useState(() => {
     try {
       return localStorage.getItem(DRAFT_KEY) ?? "";
@@ -969,7 +1036,9 @@ function Composer({ onSend, name, engine }: { onSend: (text: string) => Promise<
   });
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState("");
+  const [files, setFiles] = useState<Attachment[]>([]);
   const area = useRef<HTMLTextAreaElement>(null);
+  const picker = useRef<HTMLInputElement>(null);
 
   useLayoutEffect(() => {
     const el = area.current;
@@ -1006,18 +1075,67 @@ function Composer({ onSend, name, engine }: { onSend: (text: string) => Promise<
     if (matchMedia("(pointer: fine)").matches) area.current?.focus();
   }, []);
 
+  const patch = (key: string, p: Partial<Attachment>) => setFiles((cur) => cur.map((a) => (a.key === key ? { ...a, ...p } : a)));
+
+  const attach = useCallback((list: File[]) => {
+    const added = list.map((raw): Attachment => {
+      // A pasted screenshot is always "image.png"; give it a name worth keeping.
+      const file = raw.name === "image.png" && raw.type === "image/png" ? new File([raw], "screenshot.png", { type: raw.type, lastModified: raw.lastModified }) : raw;
+      const kind = kindOfName(file.name, file.type);
+      return {
+        key: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        file,
+        kind,
+        preview: kind === "image" || kind === "video" ? URL.createObjectURL(file) : null,
+        progress: 0,
+        ref: null,
+        error: "",
+        abort: new AbortController(),
+      };
+    });
+    setFiles((cur) => [...cur, ...added]);
+    for (const a of added)
+      uploadFile(a.file, (progress) => patch(a.key, { progress }), a.abort.signal).then(
+        (ref) => patch(a.key, { ref, progress: 1 }),
+        (e: Error) => e.name !== "AbortError" && patch(a.key, { error: e.message }),
+      );
+    area.current?.focus();
+  }, []);
+
+  // Files dropped on the chat.
+  useEffect(() => {
+    const on = (e: Event) => attach((e as CustomEvent<File[]>).detail);
+    addEventListener("wednesday:attach", on);
+    return () => removeEventListener("wednesday:attach", on);
+  }, [attach]);
+
+  const remove = (a: Attachment) => {
+    a.abort.abort();
+    if (a.ref) void deleteUpload(a.ref.path);
+    if (a.preview) URL.revokeObjectURL(a.preview);
+    setFiles((cur) => cur.filter((x) => x.key !== a.key));
+  };
+
+  const uploading = files.some((a) => !a.ref && !a.error);
+  const failed = files.some((a) => a.error);
+  const ready = (text.trim() || files.length > 0) && !uploading && !failed;
+
   const submit = async () => {
     const t = text.trim();
-    if (!t || sending) return;
+    if (!ready || sending) return;
     setSending(true);
     setErr("");
     // Clear now, so anything typed while sending is kept; put the text back only if it failed.
+    const sent = files;
     setText("");
+    setFiles([]);
     try {
-      await onSend(t);
+      await onSend(t, sent.map((a) => a.ref!.path));
+      for (const a of sent) if (a.preview) URL.revokeObjectURL(a.preview);
     } catch (e) {
       setErr(`Not sent: ${(e as Error).message}`);
       setText((cur) => (cur ? `${t}\n${cur}` : t));
+      setFiles((cur) => [...sent, ...cur]);
     } finally {
       setSending(false);
       area.current?.focus();
@@ -1031,6 +1149,13 @@ function Composer({ onSend, name, engine }: { onSend: (text: string) => Promise<
     }
   };
 
+  const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const pasted = [...e.clipboardData.files];
+    if (!pasted.length) return;
+    e.preventDefault();
+    attach(pasted);
+  };
+
   return (
     <div className="composer-wrap">
       <label className="composer__engine">Engine <select aria-label="Captain engine" value={engine} onChange={(e) => { void onSend(`/engine ${e.target.value}`).catch((e) => setErr(e.message)); }}>
@@ -1038,12 +1163,34 @@ function Composer({ onSend, name, engine }: { onSend: (text: string) => Promise<
       </select></label>
       {err && <p className="composer__err">{err}</p>}
       <form
-        className="composer"
+        className={`composer${files.length ? " composer--files" : ""}`}
         onSubmit={(e) => {
           e.preventDefault();
           void submit();
         }}
       >
+        {files.length > 0 && (
+          <ul className="tray" aria-label="Attachments">
+            {files.map((a) => (
+              <TrayItem key={a.key} a={a} onRemove={() => remove(a)} />
+            ))}
+          </ul>
+        )}
+        <button className="composer__attach" type="button" aria-label="Attach files" title="Attach files" onClick={() => picker.current?.click()}>
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden>
+            <path d="M20.5 11.5 12.6 19.4a5 5 0 0 1-7.1-7.1l8.2-8.2a3.3 3.3 0 0 1 4.7 4.7l-8.2 8.2a1.7 1.7 0 0 1-2.4-2.4l7.6-7.6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        <input
+          ref={picker}
+          type="file"
+          multiple
+          hidden
+          onChange={(e) => {
+            attach([...(e.target.files ?? [])]);
+            e.target.value = "";
+          }}
+        />
         <textarea
           ref={area}
           id="message"
@@ -1055,14 +1202,61 @@ function Composer({ onSend, name, engine }: { onSend: (text: string) => Promise<
           aria-label={`Message ${name}`}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKey}
+          onPaste={onPaste}
         />
-        <button className="composer__send" type="submit" disabled={!text.trim() || sending} aria-label="Send">
+        <button className="composer__send" type="submit" disabled={!ready || sending} aria-label={uploading ? "Uploading" : "Send"} title={uploading ? "Waiting for uploads" : failed ? "Remove the failed upload first" : undefined}>
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
             <path d="M12 19V5M5.5 11.5 12 5l6.5 6.5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
       </form>
     </div>
+  );
+}
+
+/** One attachment in the composer: preview, progress, remove. */
+function TrayItem({ a, onRemove }: { a: Attachment; onRemove: () => void }) {
+  const name = a.file.name;
+  const busy = !a.ref && !a.error;
+  const media = a.kind === "image" || a.kind === "video";
+  return (
+    <li className={`tray__item${media ? " tray__item--media" : ""}${busy ? " tray__item--busy" : ""}${a.error ? " tray__item--error" : ""}`} title={a.error ? `${name}: ${a.error}` : name}>
+      {a.kind === "image" && a.preview && <img className="tray__thumb" src={a.preview} alt="" />}
+      {a.kind === "video" && a.preview && (
+        <>
+          <video className="tray__thumb" src={`${a.preview}#t=0.1`} muted preload="metadata" playsInline />
+          <span className="tray__play" aria-hidden>
+            <svg viewBox="0 0 24 24" width="12" height="12">
+              <path d="M8 5.5v13l11-6.5z" fill="currentColor" />
+            </svg>
+          </span>
+          {!busy && <span className="tray__badge">{formatSize(a.file.size)}</span>}
+        </>
+      )}
+      {media && busy && <span className="tray__badge">{Math.round(a.progress * 100)}%</span>}
+      {!media && (
+        <span className="tray__file">
+          <span className="filechip__icon" aria-hidden>
+            {/\.([^.]{1,5})$/.exec(name)?.[1]?.toUpperCase() ?? "FILE"}
+          </span>
+          <span className="filechip__text">
+            <span className="filechip__name">{displayName(name)}</span>
+            <span className="filechip__meta">{a.error ? "Upload failed" : busy ? `${Math.round(a.progress * 100)}% of ${formatSize(a.file.size)}` : formatSize(a.file.size)}</span>
+          </span>
+        </span>
+      )}
+      {busy && (
+        <span className="tray__progress" role="progressbar" aria-label={`Uploading ${name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(a.progress * 100)}>
+          <i style={{ width: `${Math.max(4, a.progress * 100)}%` }} />
+        </span>
+      )}
+      {a.error && media && <span className="tray__failed">Failed</span>}
+      <button type="button" className="tray__remove" aria-label={`Remove ${name}`} onClick={onRemove}>
+        <svg viewBox="0 0 24 24" width="10" height="10" aria-hidden>
+          <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+        </svg>
+      </button>
+    </li>
   );
 }
 
