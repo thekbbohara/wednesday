@@ -21,6 +21,18 @@
 .plan-footer button:hover {
   background: var(--panel-2);
 }
+
+.plan-tools button:active,
+.plan-footer button:active,
+.plan-inspector button:active {
+  transform: scale(0.96);
+}
+
+.plan-tools button,
+.plan-footer button,
+.plan-inspector button {
+  transition: background 0.2s var(--ease), transform 0.1s var(--ease);
+}
 .plan-tools input,
 .plan-tools select,
 .plan-inspector input,

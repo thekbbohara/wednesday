@@ -4,13 +4,18 @@ from playwright.sync_api import sync_playwright
 BASE = "http://127.0.0.1:4799"
 OUT = sys.argv[1]
 DB = sys.argv[2]
+# Optional: viewport width, screenshot name prefix, and "nomobile" to skip the 375px part.
+WIDTH = int(sys.argv[3]) if len(sys.argv) > 3 else 1440
+PREFIX = sys.argv[4] if len(sys.argv) > 4 else ""
+MOBILE = not (len(sys.argv) > 5 and sys.argv[5] == "nomobile")
 IMG = "/home/kb26/Downloads/2499.jpg"
 IMG2 = "/home/kb26/Downloads/01-affected-projects.png"
 VIDEO = "/home/kb26/Downloads/bulin-47.mp4"
 os.makedirs(OUT, exist_ok=True)
 shots = []
 def shot(page, name, **kw):
-    if name not in ("01-drop-overlay.png", "06-lightbox.png"):
+    name = PREFIX + name
+    if not name.endswith(("01-drop-overlay.png", "06-lightbox.png")):
         page.evaluate("() => { const t = document.querySelector('.thread'); if (t) t.scrollTop = t.scrollHeight }")
         time.sleep(0.4)
     p = os.path.join(OUT, name)
@@ -23,7 +28,7 @@ def b64(path):
 
 with sync_playwright() as pw:
     b = pw.chromium.launch()
-    ctx = b.new_context(viewport={"width": 1440, "height": 1000}, device_scale_factor=1)
+    ctx = b.new_context(viewport={"width": WIDTH, "height": 1000}, device_scale_factor=1)
     page = ctx.new_page()
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
@@ -62,6 +67,7 @@ with sync_playwright() as pw:
       target.dispatchEvent(new DragEvent('dragover', { dataTransfer: window.__drop, bubbles: true, cancelable: true }));
     }""", b64(VIDEO))
     page.wait_for_selector(".dropzone")
+    time.sleep(0.4)
     shot(page, "01-drop-overlay.png")
     page.evaluate("""() => {
       const target = document.querySelector('.page__view:not([hidden])');
@@ -69,7 +75,7 @@ with sync_playwright() as pw:
     }""")
     page.wait_for_selector(".tray__progress")
     time.sleep(1.5)
-    shot(page, "02-tray-uploading.png", clip={"x": 300, "y": 700, "width": 1140, "height": 300})
+    shot(page, "02-tray-uploading.png", clip={"x": 0, "y": 700, "width": WIDTH, "height": 300})
     assert page.locator(".composer__send").is_disabled(), "send must wait for uploads"
     page.wait_for_function("document.querySelectorAll('.tray__progress').length === 0", timeout=60000)
     cdp.send("Network.emulateNetworkConditions", {"offline": False, "latency": 0, "downloadThroughput": -1, "uploadThroughput": -1})
@@ -77,7 +83,7 @@ with sync_playwright() as pw:
     cdp.detach()
     assert page.locator(".tray__item").count() == 3
     page.fill(".composer__input", "Three things for you: a photo, a screenshot and a clip.")
-    shot(page, "03-tray-ready.png", clip={"x": 300, "y": 700, "width": 1140, "height": 300})
+    shot(page, "03-tray-ready.png", clip={"x": 0, "y": 700, "width": WIDTH, "height": 300})
 
     # Remove (x) works and deletes the upload: add a throwaway file and remove it.
     page.set_input_files('.composer input[type=file]', {"name": "notes.txt", "mimeType": "text/plain", "buffer": b"throwaway"})
@@ -137,10 +143,10 @@ with sync_playwright() as pw:
     assert all(i["w"] > 0 for i in imgs) and len(imgs) >= 2
     time.sleep(0.5)
     shot(page, "05-reply-video-and-images.png")
-    page.set_viewport_size({"width": 1440, "height": 2000})
+    page.set_viewport_size({"width": WIDTH, "height": 2000})
     time.sleep(0.6)
     shot(page, "05b-reply-whole-message.png")
-    page.set_viewport_size({"width": 1440, "height": 1000})
+    page.set_viewport_size({"width": WIDTH, "height": 1000})
 
     # Full size on click.
     page.locator(".msg--captain .media__image").last.click()
@@ -160,6 +166,11 @@ with sync_playwright() as pw:
     assert owner_media == 3, owner_media
 
     # Mobile.
+    if not MOBILE:
+        print("PAGE ERRORS", errors)
+        b.close()
+        print(json.dumps(shots))
+        sys.exit(0)
     m = b.new_context(viewport={"width": 375, "height": 812}, device_scale_factor=2, is_mobile=True, has_touch=True)
     mp = m.new_page()
     mp.goto(BASE)

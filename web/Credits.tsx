@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
 import { PageHead } from "./pages";
 import { SystemPanel } from "./System";
+import { useScramble } from "./useScramble";
 import type { CreditAccount } from "../src/credits-types";
+
+function Pct({ value }: { value: number }) {
+  const v = useScramble(Number(value.toFixed(2)));
+  return <strong>{v}% remaining</strong>;
+}
 
 export function CreditsPage() {
   const [accounts, setAccounts] = useState<CreditAccount[]>([]);
@@ -39,7 +45,7 @@ export function CreditsPage() {
           <p className="credit-account mono">{a.account}</p>
           {a.reason && <p className="credits-error">{a.reason}</p>}
           {a.allowances.map((w, i) => <div className="credit-window" key={i}>
-            <div className="credit-window__head"><span>{w.label}</span><strong>{w.remainingPercent !== undefined ? `${Number(w.remainingPercent.toFixed(2))}% remaining` : w.remaining}</strong></div>
+            <div className="credit-window__head"><span>{w.label}</span>{w.remainingPercent !== undefined ? <Pct value={w.remainingPercent} /> : <strong>{w.remaining}</strong>}</div>
             {w.remainingPercent !== undefined && <progress className={w.remainingPercent <= 10 ? "credit-low" : ""} value={w.remainingPercent} max={100} aria-label={`${w.label} remaining`} />}
             {w.remainingPercent !== undefined && w.remaining && <p>{w.remaining}</p>}
             <p>{w.resetsAt ? `Resets ${time(w.resetsAt)}` : "Reset time not reported"}</p>
