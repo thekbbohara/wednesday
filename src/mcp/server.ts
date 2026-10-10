@@ -11,13 +11,22 @@ import { apply, check, loadSettings, saveSettings } from '../settings.ts'
 import { ENGINES } from '../engines.ts'
 import { addSkill, DEFAULT_SKILLS, loadSkills, type Skill } from '../skills/skills.ts'
 import { FACT_KINDS, Memory, TASK_STATUSES, type Hit } from '../memory/store.ts'
+import { HybridSearch, openSearch } from '../memory/vectors.ts'
+import { loadConfig as config, sidecars } from '../config.ts'
 
 export interface AgentApi {
   url: string
   token?: string
 }
 
-export function buildServer(mem: Memory, session: string | null, agentApi: AgentApi | null = null, skills: Skill[] = DEFAULT_SKILLS, skillsDir?: string): McpServer {
+export function buildServer(
+  mem: Memory,
+  session: string | null,
+  agentApi: AgentApi | null = null,
+  skills: Skill[] = DEFAULT_SKILLS,
+  skillsDir?: string,
+  search: HybridSearch = new HybridSearch(mem, null, null),
+): McpServer {
   // Checked against the live list, so a skill added this turn can be used right away.
   const liveIds = () => (skillsDir ? loadSkills(skillsDir) : skills).map((s) => s.id)
   const checkSkill = (s: string) => {
@@ -43,19 +52,23 @@ export function buildServer(mem: Memory, session: string | null, agentApi: Agent
     'memory_search',
     {
       description:
-        'Keyword search over memory: facts (F ids), tasks (T ids) and the ledger of everything said and done (L ids). ' +
+        'Search memory by keywords and by meaning: facts (F ids), tasks (T ids) and the ledger of everything said and done (L ids). ' +
         'Use before answering any question about the past. Results carry ids to cite. Empty result means you do not have it.',
       inputSchema: {
-        query: z.string().min(1).describe('Keywords. Use distinctive words; synonyms are not matched, so try variants if nothing comes back.'),
+        query: z.string().min(1).describe('What you are looking for, in words or a short phrase. Related words also match ("crash" finds "freeze"); if nothing comes back, try other wording.'),
         scope: z.enum(['all', 'facts', 'tasks', 'ledger']).default('all'),
         limit: z.number().int().min(1).max(30).default(8),
         include_stale: z.boolean().default(false).describe('Include facts that were superseded or marked stale.'),
       },
     },
-    guard(({ query, scope, limit, include_stale }) => {
-      const hits = mem.search(query, { scope, limit, includeStale: include_stale })
-      return hits.length ? hits.map(fmtHit).join('\n') : `No matches for "${query}" in ${scope}.`
-    }),
+    async ({ query, scope, limit, include_stale }) => {
+      try {
+        const hits = await search.search(query, { scope, limit, includeStale: include_stale })
+        return ok(hits.length ? hits.map(fmtHit).join('\n') : `No matches for "${query}" in ${scope}.`)
+      } catch (e) {
+        return fail(e)
+      }
+    },
   )
 
   server.registerTool(
@@ -67,9 +80,8 @@ export function buildServer(mem: Memory, session: string | null, agentApi: Agent
     guard(({ ids }) => ids.map((id) => mem.get(id) ?? { ref: id, error: 'not found' })),
   )
 
-  server.registerTool(
-    'memory_write',
-    {
+  // fact_write is the name to use: a bare "memory_write" collides with a Claude Code built-in.
+  const factWrite = {
       description:
         'Save one atomic, durable fact (about the owner, a person, a project, a preference, or a decision with its reason). ' +
         'One fact per call. If it replaces older facts, pass their ids in supersedes; they are marked stale.',
@@ -80,12 +92,13 @@ export function buildServer(mem: Memory, session: string | null, agentApi: Agent
         source: z.string().min(1).describe('Where it came from: a ledger id like L42, or "owner".'),
         supersedes: z.array(z.number().int()).optional(),
       },
-    },
-    guard((a) => {
-      const f = mem.factWrite(a, session)
-      return `Saved F${f.id}.`
-    }),
-  )
+  }
+  const saveFact = guard((a: { kind: (typeof FACT_KINDS)[number]; subject: string; body: string; source: string; supersedes?: number[] }) => {
+    const f = mem.factWrite(a, session)
+    return `Saved F${f.id}.`
+  })
+  server.registerTool('fact_write', factWrite, saveFact)
+  server.registerTool('memory_write', { ...factWrite, description: `Same as fact_write (older name). ${factWrite.description}` }, saveFact)
 
   server.registerTool(
     'fact_mark_stale',
@@ -327,6 +340,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   }
   const mem = new Memory(db)
   const url = assistantEnv('URL')
-  const server = buildServer(mem, assistantEnv('SESSION') || null, url ? { url, token: assistantEnv('TOKEN') || undefined } : null, loadSkills(dirname(db)), dirname(db))
+  const search = openSearch(mem, sidecars(db), config().embedModel, (s) => console.error(s))
+  const server = buildServer(mem, assistantEnv('SESSION') || null, url ? { url, token: assistantEnv('TOKEN') || undefined } : null, loadSkills(dirname(db)), dirname(db), search)
   await server.connect(new StdioServerTransport())
 }

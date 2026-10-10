@@ -3,8 +3,9 @@ import { randomUUID } from 'node:crypto'
 import { mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { Config } from '../config.ts'
+import { sidecars, type Config } from '../config.ts'
 import { CLOSED_STATUSES, type LedgerEntry, type Memory, type TaskStatus } from '../memory/store.ts'
+import { HybridSearch, openSearch } from '../memory/vectors.ts'
 import { withFileLock } from './lock.ts'
 import { loadSettings } from '../settings.ts'
 import { plainDash } from '../text.ts'
@@ -40,6 +41,8 @@ export class Captain {
   /** Overridable in tests; cooldown math uses it. */
   clock: () => number = () => Date.now()
   private lockPath: string
+  private search: HybridSearch | null = null
+  private searchAt = 0
   private chain: Promise<unknown> = Promise.resolve()
   private pending: LedgerEntry[] = []
   private draining = false
@@ -107,6 +110,17 @@ export class Captain {
     }
     this.currentProvider = provider
     this.providerId = provider.id
+  }
+
+  /** Hybrid search for recall. Until the index exists (first backfill) it is keyword only, re-checked every few minutes. */
+  private searcher(): HybridSearch {
+    const stale = !this.search || (!this.search.index && Date.now() - this.searchAt > 5 * 60_000)
+    if (stale && this.mem.path !== ':memory:') {
+      this.search?.index?.close()
+      this.search = openSearch(this.mem, sidecars(this.mem.path), this.cfg.embedModel, (s) => console.log(s))
+      this.searchAt = Date.now()
+    }
+    return this.search ?? new HybridSearch(this.mem, null, null)
   }
 
   private systemPrompt(): string {
@@ -231,14 +245,14 @@ export class Captain {
       const runner = this.runnerOf(provider)
 
       let s = this.session()
-      let prompt = buildTurnPrompt(this.mem, this.cfg, inputs, this.view, s.id, this.agents?.summary() ?? null)
+      let prompt = await buildTurnPrompt(this.mem, this.cfg, inputs, this.view, s.id, this.agents?.summary() ?? null, this.searcher())
       let res = await this.call(runner, s.id, !s.fresh, prompt.text)
 
       if (res.isError && res.sessionMissing) {
         this.mem.append('system', `Captain session ${s.id} is gone (${res.text}); starting fresh`, { session: s.id })
         this.mem.sessionEnd(s.id, 'missing')
         s = this.session()
-        prompt = buildTurnPrompt(this.mem, this.cfg, inputs, this.view, s.id, this.agents?.summary() ?? null)
+        prompt = await buildTurnPrompt(this.mem, this.cfg, inputs, this.view, s.id, this.agents?.summary() ?? null, this.searcher())
         res = await this.call(runner, s.id, false, prompt.text)
       }
 

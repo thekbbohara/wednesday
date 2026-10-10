@@ -3,6 +3,7 @@
 // only gets what it has not seen yet.
 import type { Config } from '../config.ts'
 import type { Hit, LedgerEntry, LedgerKind, Memory } from '../memory/store.ts'
+import { HybridSearch } from '../memory/vectors.ts'
 
 export const CONVERSATION_KINDS: readonly LedgerKind[] = ['owner', 'captain', 'decision', 'agent']
 const RECALL_LEDGER_KINDS: readonly LedgerKind[] = ['owner', 'captain', 'decision', 'agent', 'task', 'fact', 'system']
@@ -26,7 +27,7 @@ export interface BuiltPrompt {
   injected: string[]
 }
 
-export function buildTurnPrompt(
+export async function buildTurnPrompt(
   mem: Memory,
   cfg: Config,
   inputs: LedgerEntry[],
@@ -34,7 +35,9 @@ export function buildTurnPrompt(
   sessionId: string,
   /** Live agent summary from the supervisor; null when agents are unavailable (no web server). */
   agents: string | null = null,
-): BuiltPrompt {
+  /** Keyword + meaning search; keyword only when omitted. */
+  search: HybridSearch = new HybridSearch(mem, null, null),
+): Promise<BuiltPrompt> {
   if (!inputs.length) throw new Error('a turn needs at least one input')
   const owner = inputs[0]
   const query = inputs.map((o) => o.text.slice(0, 2000)).join('\n')
@@ -65,8 +68,8 @@ export function buildTurnPrompt(
   }
 
   const recalled: Hit[] = []
-  for (const h of mem.searchFacts(query, cfg.recallFacts)) recalled.push(h)
-  for (const h of mem.searchLedger(query, cfg.recallLedger, { beforeId: tailStart, kinds: RECALL_LEDGER_KINDS })) recalled.push(h)
+  for (const h of await search.searchFacts(query, cfg.recallFacts)) recalled.push(h)
+  for (const h of await search.searchLedger(query, cfg.recallLedger, { beforeId: tailStart, kinds: RECALL_LEDGER_KINDS })) recalled.push(h)
   const fresher = recalled.filter((h) => !view.seen.has(h.ref))
   if (fresher.length) {
     for (const h of fresher) {
@@ -74,7 +77,7 @@ export function buildTurnPrompt(
       injected.push(h.ref)
     }
     parts.push(
-      `<recalled note="keyword matches for the message below; may be partial or irrelevant, use memory_search for more">\n${fresher
+      `<recalled note="keyword and meaning matches for the message below; may be partial or irrelevant, use memory_search for more">\n${fresher
         .map((h) => `${h.ref} (${h.date.slice(0, 10)}) ${h.title}: ${clip(h.text, 600)}${h.outdated ? ` [${h.outdated}]` : ''}`)
         .join('\n')}\n</recalled>`,
     )
@@ -94,7 +97,7 @@ export function handoffPrompt(reason: string): string {
   return (
     `<system_notice>Session rotation (${reason}). This session ends after this turn and a fresh one continues from memory alone. ` +
     'Call now_update so Now holds: current goals and why, open tasks by T id with their next step, anything waiting on the owner, ' +
-    'and decisions a successor must not re-litigate (cite L/F ids). Save any durable fact not yet written with memory_write. ' +
+    'and decisions a successor must not re-litigate (cite L/F ids). Save any durable fact not yet written with fact_write. ' +
     'Then reply with one line: "handoff saved".</system_notice>'
   )
 }

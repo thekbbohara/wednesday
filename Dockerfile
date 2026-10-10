@@ -3,7 +3,7 @@
 FROM node:22-bookworm-slim AS ui
 WORKDIR /app
 RUN corepack enable
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY vite.config.ts ./
 COPY web ./web
@@ -28,7 +28,7 @@ RUN groupmod -g "$GID" node && usermod -u "$UID" -g "$GID" node \
 
 WORKDIR /app
 RUN corepack enable
-COPY --chown=node:node package.json pnpm-lock.yaml ./
+COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --prod --frozen-lockfile
 COPY --chown=node:node src ./src
 COPY --chown=node:node prompts ./prompts

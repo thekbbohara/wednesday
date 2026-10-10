@@ -29,7 +29,11 @@ Rules:
 - Every `source` is an L id from this day's ledger. Every F id must be one
   listed in the facts.
 - Do not re-add facts that already exist, even reworded. Captain messages and
-  fact entries in the ledger often repeat facts already saved.
+  fact entries in the ledger often repeat facts already saved. A quick pass
+  runs during the day, so many of the day's facts are already in the list,
+  with a source from this day: those are done, do not add them again.
+- When the input starts with `<pass>`, it is that quick pass: return facts
+  only, no digest.
 - Subjects are short handles ("owner city", "stockmate hosting"); bodies are
   one or two sentences.
 - Use a plain dash "-", never the em dash.

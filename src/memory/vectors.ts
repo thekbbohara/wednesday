@@ -6,7 +6,7 @@
 // is exactly the keyword search.
 import { DatabaseSync } from 'node:sqlite'
 import { createHash } from 'node:crypto'
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { Fact, Hit, LedgerEntry, LedgerKind, Memory, Task } from './store.ts'
 
@@ -149,6 +149,19 @@ export class VectorIndex {
       // Vectors from another model are not comparable: start over.
       this.db.exec('DELETE FROM vec; DELETE FROM meta;')
       this.metaSet('model', model)
+    }
+  }
+
+  /** An index built with this model, opened for searching; null if there is none yet. Never resets anything. */
+  static openExisting(path: string, model: string): VectorIndex | null {
+    if (!model || !existsSync(path)) return null
+    try {
+      const probe = new DatabaseSync(path, { readOnly: true })
+      const row = probe.prepare("SELECT value FROM meta WHERE key = 'model'").get() as { value: string } | undefined
+      probe.close()
+      return row?.value === model ? new VectorIndex(path, model) : null
+    } catch {
+      return null
     }
   }
 
@@ -379,4 +392,16 @@ export class HybridSearch {
       })
       .filter((h): h is Hit => h !== null)
   }
+}
+
+/**
+ * Hybrid search over a memory file and its sidecars. Missing model, missing
+ * index or a load failure all mean keyword search, with one log line.
+ */
+export function openSearch(mem: Memory, paths: { vec: string; models: string }, model: string, log: (s: string) => void = () => {}): HybridSearch {
+  const index = model ? VectorIndex.openExisting(paths.vec, model) : null
+  if (!index) return new HybridSearch(mem, null, null, log)
+  const embedder = new LocalEmbedder({ model, cacheDir: paths.models, download: false, threads: 2 })
+  embedder.warm()
+  return new HybridSearch(mem, index, embedder, log)
 }

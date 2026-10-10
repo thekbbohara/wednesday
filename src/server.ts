@@ -24,7 +24,8 @@ import { ClaudeSleepModel } from './sleep/sleep.ts'
 import { loadSkills, type Skill } from './skills/skills.ts'
 import { apply, check, parseEngineCommand, currentSettings, loadSettings, MODELS, saveSettings, type Settings } from './settings.ts'
 import { EXP_RULES, OVERALL_SCALE, progress, type Progress } from './skills/levels.ts'
-import { startSleepSchedule } from './sleep/schedule.ts'
+import { startExtractSchedule, startSleepSchedule } from './sleep/schedule.ts'
+import { startIndexer } from './memory/indexer.ts'
 import { isUsageCommand, validUsageCommand, usageReport } from './credits-command.ts'
 import { Credits } from './credits.ts'
 import { readSystem } from './system.ts'
@@ -455,6 +456,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const supervisor = new Supervisor({ mem, name: cfg.name, dataDir: cfg.dataDir, socket: assistantEnv('TMUX_SOCKET') || 'majordomo', hook: { url: selfUrl, token }, claudeConfigDir: () => cfg.claudeConfigDir })
   supervisor.start()
   const { app } = createApp({ mem, cfg, runnerFor: (p) => buildRunner(p, cfg), token, supervisor, selfUrl, persistSettings: true, webRoot: resolve(import.meta.dirname, '../dist') })
-  startSleepSchedule(mem, cfg, new ClaudeSleepModel({ bin: cfg.claudeBin, model: () => cfg.sleepModel, promptFile: cfg.sleepPromptFile, timeoutSec: cfg.turnTimeout, cwd: cfg.dataDir, name: cfg.name, configDir: () => cfg.claudeConfigDir }))
+  startIndexer(mem, cfg)
+  const sleepModel = new ClaudeSleepModel({ bin: cfg.claudeBin, model: () => cfg.sleepModel, promptFile: cfg.sleepPromptFile, timeoutSec: cfg.turnTimeout, cwd: cfg.dataDir, name: cfg.name, configDir: () => cfg.claudeConfigDir })
+  startSleepSchedule(mem, cfg, sleepModel)
+  startExtractSchedule(mem, cfg, sleepModel)
   serve({ fetch: app.fetch, hostname: host, port }, () => console.log(`${cfg.name} on http://${host}:${port} - memory ${cfg.dbPath} - model ${cfg.model} - sleep ${cfg.sleepAt || 'off'}`))
 }

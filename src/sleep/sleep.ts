@@ -9,6 +9,9 @@ import { FACT_KINDS, type Fact, type FactKind, type LedgerEntry, type Memory } f
 
 export const SLEEP_SESSION = 'sleep'
 const CURSOR = 'sleep_cursor'
+const EXTRACT_CURSOR = 'extract_cursor'
+const EXTRACT_FACTS = { all: 12_000, relevant: 40, recent: 20 }
+const EXTRACT_PASS = '<pass>Quick pass during the day, not the nightly sleep: only facts (add, supersede, stale, merge). No digest.</pass>'
 const ENTRY_CHARS = 2000
 const ALL_FACTS_CHARS = 40_000
 
@@ -33,6 +36,14 @@ const fact = {
   body: { type: 'string' },
   source: { type: 'string', description: 'L id from this day, e.g. L42' },
 }
+/** Output schema. The quick extraction pass has no digest. */
+export function opsSchema(opts: { digest?: boolean } = {}) {
+  const digest = opts.digest ?? true
+  const props: Record<string, unknown> = { ...OPS_SCHEMA.properties }
+  if (!digest) delete props.digest
+  return { ...OPS_SCHEMA, properties: props, required: OPS_SCHEMA.required.filter((k) => digest || k !== 'digest') }
+}
+
 export const OPS_SCHEMA = {
   type: 'object',
   properties: {
@@ -51,8 +62,17 @@ export const OPS_SCHEMA = {
   required: ['add', 'supersede', 'stale', 'merge', 'digest'],
 }
 
+/** What one model call cost, as reported by the CLI. */
+export interface ModelUsage {
+  costUsd: number
+  inputTokens: number
+  outputTokens: number
+  ms: number
+}
+
 export interface SleepModel {
-  consolidate(prompt: string): Promise<SleepOps>
+  /** `extract`: the quick pass between sleeps, facts only (no digest). */
+  consolidate(prompt: string, opts?: { extract?: boolean }): Promise<SleepOps & { usage?: ModelUsage }>
 }
 
 export interface ClaudeSleepOptions {
@@ -75,7 +95,8 @@ export class ClaudeSleepModel implements SleepModel {
     this.opts = opts
   }
 
-  consolidate(prompt: string): Promise<SleepOps> {
+  consolidate(prompt: string, opts: { extract?: boolean } = {}): Promise<SleepOps & { usage?: ModelUsage }> {
+    const started = Date.now()
     const args = [
       '-p',
       '--output-format', 'json',
@@ -85,7 +106,7 @@ export class ClaudeSleepModel implements SleepModel {
       '--tools', '',
       '--no-session-persistence',
       '--system-prompt', readFileSync(this.opts.promptFile, 'utf8').replaceAll('{{NAME}}', this.opts.name ?? 'Wednesday'),
-      '--json-schema', JSON.stringify(OPS_SCHEMA),
+      '--json-schema', JSON.stringify(opsSchema({ digest: !opts.extract })),
     ]
     return new Promise((resolve, reject) => {
       const dir = typeof this.opts.configDir === 'function' ? this.opts.configDir() : (this.opts.configDir ?? '')
@@ -102,9 +123,22 @@ export class ClaudeSleepModel implements SleepModel {
       child.on('close', (code) => {
         clearTimeout(timer)
         try {
-          const d = JSON.parse(out) as { is_error?: boolean; result?: string; structured_output?: SleepOps }
+          const d = JSON.parse(out) as {
+            is_error?: boolean
+            result?: string
+            structured_output?: SleepOps
+            total_cost_usd?: number
+            usage?: { input_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number; output_tokens?: number }
+          }
           if (d.is_error || !d.structured_output) throw new Error(d.result || 'no structured output')
-          resolve(d.structured_output)
+          const u = d.usage ?? {}
+          const usage: ModelUsage = {
+            costUsd: Number(d.total_cost_usd ?? 0),
+            inputTokens: (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0),
+            outputTokens: u.output_tokens ?? 0,
+            ms: Date.now() - started,
+          }
+          resolve({ ...d.structured_output, digest: d.structured_output.digest ?? '', usage })
         } catch (e) {
           reject(new Error(`sleep model failed (exit ${code}): ${(e as Error).message} ${err.slice(0, 300)}`.trim()))
         }
@@ -171,15 +205,19 @@ export function buildDayPrompt(date: string, entries: LedgerEntry[], facts: Fact
   return `<day date="${date}">\n<ledger>\n${ledger}\n</ledger>\n<facts>\n${known}\n</facts>\n</day>`
 }
 
-/** Facts to show the model: all of them while memory is small, otherwise the ones relevant to the day. */
-function factsFor(mem: Memory, entries: LedgerEntry[]): Fact[] {
+/**
+ * Facts to show the model: all of them while memory is small, otherwise the
+ * ones relevant to the entries plus the newest. The quick pass reads fewer
+ * entries, so it gets a smaller set and stays cheap.
+ */
+function factsFor(mem: Memory, entries: LedgerEntry[], budget = { all: ALL_FACTS_CHARS, relevant: 80, recent: 40 }): Fact[] {
   const all = mem.factsAll()
   const size = all.reduce((n, f) => n + f.subject.length + f.body.length + 40, 0)
-  if (size <= ALL_FACTS_CHARS) return all
+  if (size <= budget.all) return all
   const ids = new Set<number>()
   const text = entries.map((e) => e.text.slice(0, 500)).join('\n')
-  for (const h of mem.searchFacts(text, 80)) ids.add(Number(h.ref.slice(1)))
-  for (const f of all.slice(-40)) ids.add(f.id)
+  for (const h of mem.searchFacts(text, budget.relevant)) ids.add(Number(h.ref.slice(1)))
+  for (const f of all.slice(-budget.recent)) ids.add(f.id)
   return all.filter((f) => ids.has(f.id))
 }
 
@@ -331,4 +369,70 @@ function chunk(entries: LedgerEntry[], maxChars: number): LedgerEntry[][] {
   }
   if (cur.length) out.push(cur)
   return out
+}
+
+export interface ExtractResult {
+  /** Ledger range read (sleep inputs only); null when there was nothing new. */
+  from: number | null
+  to: number | null
+  entries: number
+  calls: number
+  added: number
+  superseded: number
+  staled: number
+  merged: number
+  skipped: string[]
+  usage: ModelUsage
+}
+
+/** Where the quick pass starts: after whatever either pass has already read. */
+function extractCursor(mem: Memory): number {
+  return Math.max(Number(mem.metaGet(EXTRACT_CURSOR) ?? 0), Number(mem.metaGet(CURSOR) ?? 0))
+}
+
+/** Conversation waiting for the quick pass: how many entries, and when the oldest was written. */
+export function extractPending(mem: Memory): { count: number; oldest: string | null } {
+  const waiting = mem.ledgerSince(extractCursor(mem)).filter(sleepInput)
+  return { count: waiting.length, oldest: waiting[0]?.ts ?? null }
+}
+
+/**
+ * The quick pass between sleeps: the same model, prompt and validation as the
+ * nightly sleep, over only what is new since the last pass, writing facts but
+ * no digest. The nightly sleep still reads the whole day and writes the digest;
+ * it sees these facts and does not add them again.
+ */
+export async function runExtract(mem: Memory, model: SleepModel, opts: { maxChars?: number } = {}): Promise<ExtractResult> {
+  const fresh = mem.ledgerSince(extractCursor(mem))
+  const entries = fresh.filter(sleepInput)
+  const r: ExtractResult = {
+    from: entries[0]?.id ?? null,
+    to: entries.at(-1)?.id ?? null,
+    entries: entries.length,
+    calls: 0,
+    added: 0,
+    superseded: 0,
+    staled: 0,
+    merged: 0,
+    skipped: [],
+    usage: { costUsd: 0, inputTokens: 0, outputTokens: 0, ms: 0 },
+  }
+  for (const part of chunk(entries, opts.maxChars ?? 30_000)) {
+    const date = localDay(part.at(-1)!.ts)
+    const out = await model.consolidate(`${EXTRACT_PASS}\n${buildDayPrompt(date, part, factsFor(mem, part, EXTRACT_FACTS))}`, { extract: true })
+    r.calls++
+    if (out.usage) for (const k of ['costUsd', 'inputTokens', 'outputTokens', 'ms'] as const) r.usage[k] += out.usage[k]
+    const { ok, skipped } = validate({ ...out, digest: '' }, new Set(part.map((e) => e.id)), mem)
+    r.skipped.push(...skipped)
+    const n = apply(mem, ok)
+    r.added += n.added
+    r.superseded += n.superseded
+    r.staled += n.staled
+    r.merged += n.merged
+    // Each part is done once applied, so a failure later re-reads only what is left.
+    mem.metaSet(EXTRACT_CURSOR, String(part.at(-1)!.id))
+  }
+  const last = fresh.at(-1)?.id
+  if (last && last > extractCursor(mem)) mem.metaSet(EXTRACT_CURSOR, String(last))
+  return r
 }

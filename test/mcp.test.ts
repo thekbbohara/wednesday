@@ -44,6 +44,7 @@ describe('majordomo MCP server', () => {
         'agent_stop',
         'captain_engine_set',
         'fact_mark_stale',
+        'fact_write',
         'log_decision',
         'memory_get',
         'memory_search',
@@ -60,7 +61,7 @@ describe('majordomo MCP server', () => {
   })
 
   it('writes and finds facts, tasks, decisions; stamps the session', async () => {
-    expect(text(await call('memory_write', { kind: 'owner', subject: 'owner city', body: 'Kathmandu', source: 'owner' }))).toBe('Saved F1.')
+    expect(text(await call('fact_write', { kind: 'owner', subject: 'owner city', body: 'Kathmandu', source: 'owner' }))).toBe('Saved F1.')
     expect(text(await call('task_create', { title: 'Build memory', goal: 'captain survives rotation', skill: 'coding' }))).toBe('Created T1 (coding).')
     expect((await call('task_create', { title: 'x', goal: 'y', skill: 'juggling' })).isError).toBe(true)
     expect(text(await call('log_decision', { decision: 'Use SQLite FTS5', reason: 'one file, no servers' }))).toMatch(/^Logged L\d+\.$/)
@@ -79,6 +80,11 @@ describe('majordomo MCP server', () => {
     const mem = new Memory(db)
     expect(mem.ledgerTail(10).filter((e) => e.kind !== 'system').every((e) => e.session === 'sess-1')).toBe(true)
     mem.close()
+  })
+
+  it('keeps memory_write as an alias, and searches by keyword when there is no meaning index', async () => {
+    expect(text(await call('memory_write', { kind: 'project', subject: 'pc health', body: 'the PC froze under load', source: 'owner' }))).toMatch(/^Saved F\d+\.$/)
+    expect(text(await call('memory_search', { query: 'froze', scope: 'facts' }))).toMatch(/pc health/)
   })
 
   it('says plainly that agents need the web server when it is not running', async () => {
